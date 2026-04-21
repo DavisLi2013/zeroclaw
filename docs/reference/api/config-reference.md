@@ -854,5 +854,6 @@ zeroclaw service restart
 
 - [channels-reference.md](channels-reference.md)
 - [providers-reference.md](providers-reference.md)
+- [project-root-sessions.md](../project-root-sessions.md)
 - [operations-runbook.md](../../ops/operations-runbook.md)
 - [troubleshooting.md](../../ops/troubleshooting.md)

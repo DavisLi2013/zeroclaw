@@ -11,7 +11,7 @@
 //! | Method            | Description                              |
 //! |-------------------|------------------------------------------|
 //! | `initialize`      | Handshake — returns server capabilities  |
-//! | `session/new`     | Create an isolated agent session          |
+//! | `session/new`     | Create an isolated agent session; requires `project_root` |
 //! | `session/prompt`  | Send a prompt, stream back events         |
 //! | `session/stop`    | Gracefully terminate a session            |
 
@@ -254,18 +254,33 @@ impl AcpServer {
             });
         }
 
-        let workspace_dir = params
-            .get("cwd")
-            .or_else(|| params.get("workspaceDir"))
-            .or_else(|| params.get("workspace_dir"))
+        let project_root = params
+            .get("project_root")
+            .or_else(|| params.get("projectRoot"))
             .and_then(|v| v.as_str())
-            .unwrap_or_else(|| self.config.workspace_dir.to_str().unwrap_or("."))
-            .to_string();
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| RpcError {
+                code: INVALID_PARAMS,
+                message: "Missing required parameter: project_root".to_string(),
+                data: None,
+            })?;
+
+        let mut session_config = self.config.clone();
+        let workspace_dir =
+            crate::config::project_root::apply_project_root(&mut session_config, project_root.as_ref())
+                .map_err(|e| RpcError {
+                    code: INVALID_PARAMS,
+                    message: format!("Invalid project_root: {e}"),
+                    data: None,
+                })?
+                .to_string_lossy()
+                .to_string();
 
         let session_id = Uuid::new_v4().to_string();
 
-        // Build agent from global config
-        let agent = Agent::from_config(&self.config)
+        // Build agent from session-local config
+        let agent = Agent::from_config(&session_config)
             .await
             .map_err(|e| RpcError {
                 code: INTERNAL_ERROR,
@@ -588,5 +603,39 @@ mod tests {
         let json = serde_json::to_string(&notif).unwrap();
         assert!(json.contains(r#""method":"session/event""#));
         assert!(json.contains(r#""content":"hello""#));
+    }
+
+    #[tokio::test]
+    async fn session_new_requires_project_root() {
+        let server = AcpServer::new(Config::default(), AcpServerConfig::default());
+
+        let error = server.handle_session_new(&serde_json::json!({})).await.unwrap_err();
+        assert_eq!(error.code, INVALID_PARAMS);
+        assert!(error.message.contains("project_root"));
+    }
+
+    #[tokio::test]
+    async fn session_new_returns_canonical_project_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_root = temp.path().join("project-root");
+        std::fs::create_dir_all(&project_root).unwrap();
+
+        let server = AcpServer::new(Config::default(), AcpServerConfig::default());
+        let result = match server
+            .handle_session_new(&serde_json::json!({
+                "project_root": project_root.to_string_lossy().to_string()
+            }))
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => panic!("session/new should succeed, got: {}", error.message),
+        };
+
+        assert_eq!(
+            result["workspaceDir"],
+            serde_json::Value::String(
+                project_root.canonicalize().unwrap().to_string_lossy().to_string()
+            )
+        );
     }
 }

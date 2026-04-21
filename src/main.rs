@@ -62,6 +62,12 @@ fn print_no_command_help() -> Result<()> {
     Ok(())
 }
 
+fn apply_runtime_project_root(config: &mut Config, project_root: &std::path::Path) -> Result<()> {
+    crate::config::project_root::apply_project_root(config, project_root)?;
+    observability::runtime_trace::init_from_config(&config.observability, &config.workspace_dir);
+    Ok(())
+}
+
 #[cfg(windows)]
 fn pause_after_no_command_help() {
     println!();
@@ -210,14 +216,18 @@ Launches an interactive chat session with the configured AI provider. \
 Use --message for single-shot queries without entering interactive mode.
 
 Examples:
-  zeroclaw agent                              # interactive session
-  zeroclaw agent -m \"Summarize today's logs\"  # single message
-  zeroclaw agent -p anthropic --model claude-sonnet-4-20250514
-  zeroclaw agent --peripheral nucleo-f401re:/dev/ttyACM0")]
+  zeroclaw agent --project-root /path/to/project
+  zeroclaw agent --project-root /path/to/project -m \"Summarize today's logs\"
+  zeroclaw agent --project-root /path/to/project -p anthropic --model claude-sonnet-4-20250514
+  zeroclaw agent --project-root /path/to/project --peripheral nucleo-f401re:/dev/ttyACM0")]
     Agent {
         /// Single message mode (don't enter interactive mode)
         #[arg(short, long)]
         message: Option<String>,
+
+        /// Project root for this session. All workspace-scoped reads, writes, tools, and prompt context are bound to this directory.
+        #[arg(long, value_name = "PATH", required = true)]
+        project_root: PathBuf,
 
         /// Load and save interactive session state in this JSON file
         #[arg(long)]
@@ -268,7 +278,10 @@ Methods: initialize, session/new, session/prompt, session/stop.
 
 Examples:
   zeroclaw acp                        # start ACP server
-  zeroclaw acp --max-sessions 5       # limit concurrent sessions")]
+  zeroclaw acp --max-sessions 5       # limit concurrent sessions
+
+ACP note:
+  session/new must include project_root or projectRoot.")]
     Acp {
         /// Maximum concurrent sessions (default: 10)
         #[arg(long)]
@@ -292,10 +305,14 @@ Use 'zeroclaw service install' to register the daemon as an OS \
 service (systemd/launchd) for auto-start on boot.
 
 Examples:
-  zeroclaw daemon                   # use config defaults
-  zeroclaw daemon -p 9090           # gateway on port 9090
-  zeroclaw daemon --host 127.0.0.1  # localhost only")]
+  zeroclaw daemon --project-root /path/to/project
+  zeroclaw daemon --project-root /path/to/project -p 9090
+  zeroclaw daemon --project-root /path/to/project --host 127.0.0.1")]
     Daemon {
+        /// Project root for this daemon instance. All workspace-scoped runtime state is bound to this directory.
+        #[arg(long, value_name = "PATH", required = true)]
+        project_root: PathBuf,
+
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
         port: Option<u16>,
@@ -1022,12 +1039,14 @@ async fn main() -> Result<()> {
 
         Commands::Agent {
             message,
+            project_root,
             session_state_file,
             provider,
             model,
             temperature,
             peripheral,
         } => {
+            apply_runtime_project_root(&mut config, &project_root)?;
             let final_temperature = temperature.unwrap_or(config.default_temperature);
 
             Box::pin(agent::run(
@@ -1160,7 +1179,12 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Daemon { port, host } => {
+        Commands::Daemon {
+            project_root,
+            port,
+            host,
+        } => {
+            apply_runtime_project_root(&mut config, &project_root)?;
             if let Ok(exe) = std::env::current_exe() {
                 let exe_str = exe.to_string_lossy();
                 if exe_str.contains(".cargo/bin") || exe_str.contains("/home/") {
@@ -2795,8 +2819,15 @@ mod tests {
 
     #[test]
     fn agent_command_parses_with_temperature() {
-        let cli = Cli::try_parse_from(["zeroclaw", "agent", "--temperature", "0.5"])
-            .expect("agent command with temperature should parse");
+        let cli = Cli::try_parse_from([
+            "zeroclaw",
+            "agent",
+            "--project-root",
+            "project-a",
+            "--temperature",
+            "0.5",
+        ])
+        .expect("agent command with temperature should parse");
 
         match cli.command {
             Commands::Agent { temperature, .. } => {
@@ -2807,9 +2838,22 @@ mod tests {
     }
 
     #[test]
+    fn agent_command_requires_project_root() {
+        let cli = Cli::try_parse_from(["zeroclaw", "agent", "--message", "hello"]);
+        assert!(cli.is_err(), "agent should require --project-root");
+    }
+
+    #[test]
     fn agent_command_parses_without_temperature() {
-        let cli = Cli::try_parse_from(["zeroclaw", "agent", "--message", "hello"])
-            .expect("agent command without temperature should parse");
+        let cli = Cli::try_parse_from([
+            "zeroclaw",
+            "agent",
+            "--message",
+            "hello",
+            "--project-root",
+            "project-a",
+        ])
+        .expect("agent command without temperature should parse");
 
         match cli.command {
             Commands::Agent { temperature, .. } => {
@@ -2821,9 +2865,15 @@ mod tests {
 
     #[test]
     fn agent_command_parses_session_state_file() {
-        let cli =
-            Cli::try_parse_from(["zeroclaw", "agent", "--session-state-file", "session.json"])
-                .expect("agent command with session state file should parse");
+        let cli = Cli::try_parse_from([
+            "zeroclaw",
+            "agent",
+            "--project-root",
+            "project-a",
+            "--session-state-file",
+            "session.json",
+        ])
+        .expect("agent command with session state file should parse");
 
         match cli.command {
             Commands::Agent {
@@ -2832,6 +2882,24 @@ mod tests {
                 assert_eq!(session_state_file, Some(PathBuf::from("session.json")));
             }
             other => panic!("expected agent command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn daemon_command_requires_project_root() {
+        let cli = Cli::try_parse_from(["zeroclaw", "daemon"]);
+        assert!(cli.is_err(), "daemon should require --project-root");
+    }
+
+    #[test]
+    fn daemon_command_parses_project_root() {
+        let cli =
+            Cli::try_parse_from(["zeroclaw", "daemon", "--project-root", "project-daemon"])
+                .expect("daemon command with project root should parse");
+
+        match cli.command {
+            Commands::Daemon { .. } => {}
+            other => panic!("expected daemon command, got {other:?}"),
         }
     }
 

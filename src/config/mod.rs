@@ -1,3 +1,4 @@
+pub mod project_root;
 pub mod schema;
 pub mod traits;
 pub mod workspace;
