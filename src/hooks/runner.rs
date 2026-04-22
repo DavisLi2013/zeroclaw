@@ -155,6 +155,10 @@ impl HookRunner {
         HookResult::Continue((provider, model))
     }
 
+    /// Legacy compatibility path for string-level prompt mutation.
+    ///
+    /// Active runtime context assembly should go through
+    /// `run_on_context_build_start(...)` and `ContextBuilder`.
     pub async fn run_before_prompt_build(&self, mut prompt: String) -> HookResult<String> {
         for h in &self.handlers {
             let hook_name = h.name();
@@ -217,6 +221,9 @@ impl HookRunner {
         HookResult::Continue(aggregated)
     }
 
+    /// Legacy compatibility path for mutating already materialized provider
+    /// messages. New integrations should prefer context contributions earlier in
+    /// the build pipeline.
     pub async fn run_before_llm_call(
         &self,
         mut messages: Vec<ChatMessage>,

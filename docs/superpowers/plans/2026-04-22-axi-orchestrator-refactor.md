@@ -270,7 +270,11 @@ git commit -m "feat: add session runtime bundle contracts"
 Implementation note on 2026-04-22:
 - The initial landing uses a single `src/orchestrator/context.rs` module instead of separate `context_builder.rs` / `context_item.rs` files.
 - The minimal slice is intended to route system prompt, memory context, and turn user payload through `ContextBuilder` first.
-- Declarative hook-return contracts remain a follow-up once the builder is threaded through more sources.
+- Task 3 is now functionally complete in the repo:
+  - `Agent` prompt + memory + hook contributions flow through `ContextBuilder`.
+  - dispatcher and `loop_.rs` tool-result reentry flow through `ContextBuilder`.
+  - `channels::build_system_prompt_*` finalizes system prompt output through `ContextBuilder`.
+  - `before_prompt_build` / `before_llm_call` remain only as legacy compatibility surfaces and are no longer the preferred extension path.
 
 **Files:**
 - Create: `src/orchestrator/context_builder.rs`
@@ -385,6 +389,14 @@ git commit -m "feat: add unified context builder pipeline"
 
 ### Task 4: Unify Skills, Hooks, Plugins, MCP, and Commands Behind Descriptors
 
+Implementation note on 2026-04-22:
+- The initial landing uses `src/orchestrator/descriptors/{manifest,runtime_descriptor}.rs` as a pure contract/projection layer.
+- This slice intentionally does not rewire the existing skill loader, hook runner, or tool registry yet; it establishes descriptor validation and projection first.
+- The current bridge points are:
+  - `SkillDescriptor::from_skill(&crate::skills::Skill, role)`
+  - `ToolSurfaceItem::from_tool_spec(...)`
+  - `CapabilityRuntimeDescriptor::project()` for command + MCP tool surfaces, skill catalog, agent catalog, hook catalog, and plugin pipeline views.
+
 **Files:**
 - Create: `src/orchestrator/descriptors/mod.rs`
 - Create: `src/orchestrator/descriptors/manifest.rs`
@@ -471,6 +483,21 @@ git commit -m "feat: add capability runtime descriptor layer"
 ```
 
 ### Task 5: Add Safety Gates and Explicit Tool/Outbound Audits
+
+Implementation note on 2026-04-22:
+- The first landing adds `src/orchestrator/safety.rs` with:
+  - `ToolSafetyDecision`
+  - `ToolSafetyReviewGate`
+  - `OutboundAuditDecision`
+  - `OutboundSafetyAuditGate`
+- Current runtime integration is intentionally narrow:
+  - `agent/loop_.rs` now rejects tool calls that are not present in the current visible tool surface.
+  - browser-style tools are marked as `Sandbox` by the gate contract, but execution still stays on the existing runtime path for now.
+  - `channels/mod.rs` now runs outbound responses through the outbound audit gate for label generation, without changing the existing sanitize-and-send behavior.
+- Deeper follow-up work for this task remains open:
+  - route sandbox-marked tools into a distinct isolated execution path
+  - connect outbound audit labels to structured audit logging / gateway egress metadata
+  - consolidate existing `SecurityPolicy::enforce_tool_operation` checks behind the same gate contract
 
 **Files:**
 - Create: `src/orchestrator/safety.rs`

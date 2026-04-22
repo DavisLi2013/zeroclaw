@@ -65,10 +65,18 @@ pub trait HookHandler: Send + Sync {
         HookResult::Continue((provider, model))
     }
 
+    /// Legacy compatibility hook.
+    ///
+    /// New runtime context injection should use `on_context_build_start` and
+    /// contribute `ContextItem`s instead of mutating assembled prompt strings.
     async fn before_prompt_build(&self, prompt: String) -> HookResult<String> {
         HookResult::Continue(prompt)
     }
 
+    /// Legacy compatibility hook.
+    ///
+    /// New runtime context injection should use `on_context_build_start` and
+    /// contribute `ContextItem`s before provider messages are materialized.
     async fn before_llm_call(
         &self,
         messages: Vec<ChatMessage>,

@@ -118,6 +118,7 @@ use crate::observability::traits::{ObserverEvent, ObserverMetric};
 use crate::observability::{self, Observer, runtime_trace};
 use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
 use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::safety::OutboundSafetyAuditGate;
 use crate::providers::reliable::{scope_provider_fallback, take_last_provider_fallback};
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
@@ -3241,6 +3242,23 @@ async fn process_channel_message(
 
             let sanitized_response =
                 sanitize_channel_response(&outbound_response, ctx.tools_registry.as_ref());
+            let outbound_safety_labels = if sanitized_response != outbound_response {
+                vec!["credential-leak-redaction".to_string()]
+            } else {
+                Vec::new()
+            };
+            let outbound_audit_decision = OutboundSafetyAuditGate::default().review(
+                serde_json::json!({ "text": sanitized_response }),
+                &outbound_safety_labels,
+            );
+            if !outbound_audit_decision.labels.is_empty() {
+                tracing::info!(
+                    channel = %msg.channel,
+                    sender = %msg.sender,
+                    labels = ?outbound_audit_decision.labels,
+                    "outbound safety audit labels attached"
+                );
+            }
             let mut delivered_response = if sanitized_response.is_empty()
                 && !outbound_response.trim().is_empty()
             {

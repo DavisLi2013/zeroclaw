@@ -10,7 +10,7 @@ pub struct ToolResult {
 }
 
 /// Description of a tool for the LLM
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolSpec {
     pub name: String,
     pub description: String,

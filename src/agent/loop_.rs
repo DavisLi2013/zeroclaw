@@ -7,6 +7,7 @@ use crate::multimodal;
 use crate::observability::{self, Observer, ObserverEvent, runtime_trace};
 use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
 use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::safety::{ToolSafetyDecision, ToolSafetyReviewGate};
 use crate::providers::traits::StreamEvent;
 use crate::providers::{
     self, ChatMessage, ChatRequest, Provider, ProviderCapabilityError, ToolCall,
@@ -3123,6 +3124,11 @@ pub(crate) async fn run_tool_call_loop(
         let allow_parallel_execution = should_execute_tools_in_parallel(&tool_calls, approval);
         let mut executable_indices: Vec<usize> = Vec::new();
         let mut executable_calls: Vec<ParsedToolCall> = Vec::new();
+        let visible_tools = tools_registry
+            .iter()
+            .map(|tool| tool.name().to_string())
+            .collect::<Vec<_>>();
+        let tool_safety_gate = ToolSafetyReviewGate;
 
         for (idx, call) in tool_calls.iter().enumerate() {
             // ── Hook: before_tool_call (modifying) ──────────
@@ -3184,6 +3190,53 @@ pub(crate) async fn run_tool_call_loop(
                 channel_name,
                 channel_reply_target,
             );
+
+            match tool_safety_gate.review(&tool_name, &visible_tools) {
+                ToolSafetyDecision::Reject => {
+                    let blocked = format!(
+                        "Blocked by tool safety gate: '{tool_name}' is not available in this session."
+                    );
+                    runtime_trace::record_event(
+                        "tool_call_result",
+                        Some(channel_name),
+                        Some(provider_name),
+                        Some(model),
+                        Some(&turn_id),
+                        Some(false),
+                        Some(&blocked),
+                        serde_json::json!({
+                            "iteration": iteration + 1,
+                            "tool": tool_name.clone(),
+                            "arguments": scrub_credentials(&tool_args.to_string()),
+                            "safety_decision": "reject",
+                        }),
+                    );
+                    if let Some(ref tx) = on_delta {
+                        let _ = tx
+                            .send(DraftEvent::Progress(format!(
+                                "\u{274c} {}: {}\n",
+                                tool_name,
+                                truncate_with_ellipsis(&scrub_credentials(&blocked), 200)
+                            )))
+                            .await;
+                    }
+                    ordered_results[idx] = Some((
+                        tool_name.clone(),
+                        call.tool_call_id.clone(),
+                        ToolExecutionOutcome {
+                            output: blocked.clone(),
+                            success: false,
+                            error_reason: Some(blocked),
+                            duration: Duration::ZERO,
+                        },
+                    ));
+                    continue;
+                }
+                ToolSafetyDecision::Sandbox => {
+                    tracing::debug!(tool = %tool_name, "tool safety gate marked call for sandbox execution");
+                }
+                ToolSafetyDecision::Allow => {}
+            }
 
             // ── Approval hook ────────────────────────────────
             if let Some(mgr) = approval {
