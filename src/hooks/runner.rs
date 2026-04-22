@@ -6,10 +6,12 @@ use std::panic::AssertUnwindSafe;
 use tracing::info;
 
 use crate::channels::traits::ChannelMessage;
+use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
 
-use super::traits::{HookHandler, HookResult};
+use super::traits::{ContextHookResult, HookHandler, HookResult};
 
 /// Dispatcher that manages registered hook handlers.
 ///
@@ -177,6 +179,42 @@ impl HookRunner {
             }
         }
         HookResult::Continue(prompt)
+    }
+
+    pub async fn run_on_context_build_start(
+        &self,
+        build_reason: ContextBuildReason,
+    ) -> HookResult<ContextHookResult> {
+        let mut aggregated = ContextHookResult::default();
+        for h in &self.handlers {
+            let hook_name = h.name();
+            match AssertUnwindSafe(h.on_context_build_start(build_reason))
+                .catch_unwind()
+                .await
+            {
+                Ok(HookResult::Continue(result)) => {
+                    aggregated.proposed_items.extend(result.proposed_items);
+                    aggregated.ranking_hints.extend(result.ranking_hints);
+                    aggregated.redaction_hints.extend(result.redaction_hints);
+                    aggregated.budget_hints.extend(result.budget_hints);
+                    aggregated.diagnostics.extend(result.diagnostics);
+                }
+                Ok(HookResult::Cancel(reason)) => {
+                    info!(
+                        hook = hook_name,
+                        reason, "on_context_build_start cancelled by hook"
+                    );
+                    return HookResult::Cancel(reason);
+                }
+                Err(_) => {
+                    tracing::error!(
+                        hook = hook_name,
+                        "on_context_build_start hook panicked; continuing with previous values"
+                    );
+                }
+            }
+        }
+        HookResult::Continue(aggregated)
     }
 
     pub async fn run_before_llm_call(
@@ -413,6 +451,44 @@ mod tests {
         }
     }
 
+    struct ContextContributionHook {
+        name: String,
+        priority: i32,
+        item_id: String,
+        content: String,
+    }
+
+    #[async_trait]
+    impl HookHandler for ContextContributionHook {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn priority(&self) -> i32 {
+            self.priority
+        }
+        async fn on_context_build_start(
+            &self,
+            _build_reason: ContextBuildReason,
+        ) -> HookResult<ContextHookResult> {
+            HookResult::Continue(ContextHookResult {
+                proposed_items: vec![
+                    ContextItem::new(
+                        self.item_id.clone(),
+                        ContextSourceType::HookContribution,
+                        ContextTarget::SystemPrompt,
+                        "hook_context",
+                        self.content.clone(),
+                    )
+                    .with_priority(self.priority as u32),
+                ],
+                ranking_hints: Vec::new(),
+                redaction_hints: Vec::new(),
+                budget_hints: Vec::new(),
+                diagnostics: vec![format!("{} contributed context", self.name)],
+            })
+        }
+    }
+
     #[test]
     fn register_and_sort_by_priority() {
         let mut runner = HookRunner::new();
@@ -478,6 +554,36 @@ mod tests {
         match runner.run_before_prompt_build("hello".into()).await {
             HookResult::Continue(result) => assert_eq!(result, "HELLO_done"),
             HookResult::Cancel(_) => panic!("should not cancel"),
+        }
+    }
+
+    #[tokio::test]
+    async fn context_build_start_aggregates_declared_items_in_priority_order() {
+        let mut runner = HookRunner::new();
+        runner.register(Box::new(ContextContributionHook {
+            name: "high".into(),
+            priority: 10,
+            item_id: "high-item".into(),
+            content: "high-content".into(),
+        }));
+        runner.register(Box::new(ContextContributionHook {
+            name: "low".into(),
+            priority: 1,
+            item_id: "low-item".into(),
+            content: "low-content".into(),
+        }));
+
+        match runner
+            .run_on_context_build_start(ContextBuildReason::TurnGeneration)
+            .await
+        {
+            HookResult::Continue(result) => {
+                assert_eq!(result.proposed_items.len(), 2);
+                assert_eq!(result.proposed_items[0].item_id, "high-item");
+                assert_eq!(result.proposed_items[1].item_id, "low-item");
+                assert_eq!(result.diagnostics.len(), 2);
+            }
+            HookResult::Cancel(reason) => panic!("unexpected cancellation: {reason}"),
         }
     }
 }

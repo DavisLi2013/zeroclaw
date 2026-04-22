@@ -21,6 +21,13 @@ pub struct SessionActorQueue {
     idle_ttl: Duration,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionQueueSnapshot {
+    pub session_id: String,
+    pub queue_depth: usize,
+    pub max_queue_depth: usize,
+}
+
 struct SessionSlot {
     semaphore: Arc<Semaphore>,
     last_active: Mutex<Instant>,
@@ -132,6 +139,15 @@ impl SessionActorQueue {
             .unwrap_or(0)
     }
 
+    /// Return a stable queue snapshot for diagnostics and runtime bundles.
+    pub async fn snapshot(&self, session_id: &str) -> SessionQueueSnapshot {
+        SessionQueueSnapshot {
+            session_id: session_id.to_string(),
+            queue_depth: self.queue_depth(session_id).await,
+            max_queue_depth: self.max_queue_depth,
+        }
+    }
+
     /// Remove idle session slots that haven't been accessed within the TTL.
     pub async fn evict_idle(&self) -> usize {
         let mut slots = self.slots.lock().await;
@@ -230,5 +246,16 @@ mod tests {
 
         drop(guard);
         assert_eq!(queue.queue_depth("s1").await, 0);
+    }
+
+    #[tokio::test]
+    async fn queue_snapshot_reports_depth_and_limit() {
+        let queue = SessionActorQueue::new(4, 30, 600);
+        let _guard = queue.acquire("s1").await.unwrap();
+
+        let snapshot = queue.snapshot("s1").await;
+        assert_eq!(snapshot.session_id, "s1");
+        assert_eq!(snapshot.queue_depth, 1);
+        assert_eq!(snapshot.max_queue_depth, 4);
     }
 }

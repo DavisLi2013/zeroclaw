@@ -4,9 +4,12 @@ use crate::agent::dispatcher::{
 use crate::agent::memory_loader::{DefaultMemoryLoader, MemoryLoader};
 use crate::agent::prompt::{PromptContext, SystemPromptBuilder};
 use crate::config::Config;
+use crate::hooks::{HookResult, HookRunner};
 use crate::i18n::ToolDescriptions;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::observability::{self, Observer, ObserverEvent};
+use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::providers::{self, ChatMessage, ChatRequest, ConversationMessage, Provider};
 use crate::runtime;
 use crate::security::SecurityPolicy;
@@ -62,6 +65,7 @@ pub struct Agent {
     allowed_tools: Option<Vec<String>>,
     response_cache: Option<Arc<crate::memory::response_cache::ResponseCache>>,
     tool_descriptions: Option<ToolDescriptions>,
+    hooks: Option<Arc<HookRunner>>,
     /// Pre-rendered security policy summary injected into the system prompt
     /// so the LLM knows the concrete constraints before making tool calls.
     security_summary: Option<String>,
@@ -96,6 +100,7 @@ pub struct AgentBuilder {
     allowed_tools: Option<Vec<String>>,
     response_cache: Option<Arc<crate::memory::response_cache::ResponseCache>>,
     tool_descriptions: Option<ToolDescriptions>,
+    hooks: Option<Arc<HookRunner>>,
     security_summary: Option<String>,
     autonomy_level: Option<crate::security::AutonomyLevel>,
     activated_tools: Option<Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>>,
@@ -126,6 +131,7 @@ impl AgentBuilder {
             allowed_tools: None,
             response_cache: None,
             tool_descriptions: None,
+            hooks: None,
             security_summary: None,
             autonomy_level: None,
             activated_tools: None,
@@ -251,6 +257,11 @@ impl AgentBuilder {
         self
     }
 
+    pub fn hooks(mut self, hooks: Option<Arc<HookRunner>>) -> Self {
+        self.hooks = hooks;
+        self
+    }
+
     pub fn security_summary(mut self, summary: Option<String>) -> Self {
         self.security_summary = summary;
         self
@@ -320,6 +331,7 @@ impl AgentBuilder {
             allowed_tools: allowed,
             response_cache: self.response_cache,
             tool_descriptions: self.tool_descriptions,
+            hooks: self.hooks,
             security_summary: self.security_summary,
             autonomy_level: self
                 .autonomy_level
@@ -353,9 +365,9 @@ impl Agent {
     /// to avoid duplicating the system prompt.
     pub fn seed_history(&mut self, messages: &[ChatMessage]) {
         if self.history.is_empty() {
-            if let Ok(sys) = self.build_system_prompt() {
+            if let Ok(item) = self.build_system_context_item() {
                 self.history
-                    .push(ConversationMessage::Chat(ChatMessage::system(sys)));
+                    .push(ConversationMessage::Chat(ChatMessage::system(item.content)));
             }
         }
         for msg in messages {
@@ -533,6 +545,20 @@ impl Agent {
             .memory(memory)
             .observer(observer)
             .response_cache(response_cache)
+            .hooks(if config.hooks.enabled {
+                let mut runner = HookRunner::new();
+                if config.hooks.builtin.command_logger {
+                    runner.register(Box::new(crate::hooks::builtin::CommandLoggerHook::new()));
+                }
+                if config.hooks.builtin.webhook_audit.enabled {
+                    runner.register(Box::new(crate::hooks::builtin::WebhookAuditHook::new(
+                        config.hooks.builtin.webhook_audit.clone(),
+                    )));
+                }
+                Some(Arc::new(runner))
+            } else {
+                None
+            })
             .tool_dispatcher(tool_dispatcher)
             .memory_loader(Box::new(DefaultMemoryLoader::new(
                 5,
@@ -586,7 +612,7 @@ impl Agent {
         self.history.extend(other_messages);
     }
 
-    fn build_system_prompt(&self) -> Result<String> {
+    fn build_system_context_item(&self) -> Result<ContextItem> {
         let instructions = self.tool_dispatcher.prompt_instructions(&self.tools);
         let ctx = PromptContext {
             workspace_dir: &self.workspace_dir,
@@ -600,7 +626,71 @@ impl Agent {
             security_summary: self.security_summary.clone(),
             autonomy_level: self.autonomy_level,
         };
-        self.prompt_builder.build(&ctx)
+        self.prompt_builder.build_context_item(&ctx)
+    }
+
+    async fn build_turn_context(
+        &self,
+        user_message: &str,
+        timestamp_prefix: impl Into<String>,
+    ) -> Result<crate::orchestrator::context::ContextBuildResult> {
+        let mut builder = ContextBuilder::new(ContextBuildReason::TurnGeneration);
+
+        if self.history.is_empty() {
+            builder.push(self.build_system_context_item()?);
+        }
+
+        if let Some(memory_item) = self
+            .memory_loader
+            .load_context_item(
+                self.memory.as_ref(),
+                user_message,
+                self.memory_session_id.as_deref(),
+            )
+            .await
+            .unwrap_or(None)
+        {
+            builder.push(memory_item);
+        }
+
+        if let Some(hooks) = self.hooks.as_ref() {
+            match hooks
+                .run_on_context_build_start(ContextBuildReason::TurnGeneration)
+                .await
+            {
+                HookResult::Continue(result) => {
+                    for item in result.proposed_items {
+                        builder.push(item);
+                    }
+                }
+                HookResult::Cancel(reason) => {
+                    anyhow::bail!("context build cancelled by hook: {reason}");
+                }
+            }
+        }
+
+        builder.push(
+            ContextItem::new(
+                "runtime.current_datetime",
+                ContextSourceType::RuntimeDirective,
+                ContextTarget::UserMessage,
+                "turn_generation",
+                timestamp_prefix.into(),
+            )
+            .with_priority(70),
+        );
+        builder.push(
+            ContextItem::new(
+                "turn.user_message",
+                ContextSourceType::UserMessage,
+                ContextTarget::UserMessage,
+                "turn_generation",
+                user_message,
+            )
+            .with_priority(60),
+        );
+
+        Ok(builder.build())
     }
 
     async fn execute_tool_call(&self, call: &ParsedToolCall) -> ToolExecutionResult {
@@ -730,24 +820,6 @@ impl Agent {
     }
 
     pub async fn turn(&mut self, user_message: &str) -> Result<String> {
-        if self.history.is_empty() {
-            let system_prompt = self.build_system_prompt()?;
-            self.history
-                .push(ConversationMessage::Chat(ChatMessage::system(
-                    system_prompt,
-                )));
-        }
-
-        let context = self
-            .memory_loader
-            .load_context(
-                self.memory.as_ref(),
-                user_message,
-                self.memory_session_id.as_deref(),
-            )
-            .await
-            .unwrap_or_default();
-
         if self.auto_save {
             let _ = self
                 .memory
@@ -767,11 +839,21 @@ impl Agent {
         let date_str =
             format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} {tz}");
 
-        let enriched = if context.is_empty() {
-            format!("[CURRENT DATE & TIME: {date_str}]\n\n{user_message}")
-        } else {
-            format!("[CURRENT DATE & TIME: {date_str}]\n\n{context}\n\n{user_message}")
-        };
+        let context_build = self
+            .build_turn_context(user_message, format!("[CURRENT DATE & TIME: {date_str}]"))
+            .await?;
+
+        if self.history.is_empty() {
+            if let Some(system_prompt) = context_build.context_package.system_prompt.clone() {
+                self.history
+                    .push(ConversationMessage::Chat(ChatMessage::system(system_prompt)));
+            }
+        }
+
+        let enriched = context_build
+            .context_package
+            .user_message
+            .unwrap_or_else(|| user_message.to_string());
 
         self.history
             .push(ConversationMessage::Chat(ChatMessage::user(enriched)));
@@ -910,24 +992,6 @@ impl Agent {
         event_tx: tokio::sync::mpsc::Sender<TurnEvent>,
     ) -> Result<String> {
         // ── Preamble (identical to turn) ───────────────────────────────
-        if self.history.is_empty() {
-            let system_prompt = self.build_system_prompt()?;
-            self.history
-                .push(ConversationMessage::Chat(ChatMessage::system(
-                    system_prompt,
-                )));
-        }
-
-        let context = self
-            .memory_loader
-            .load_context(
-                self.memory.as_ref(),
-                user_message,
-                self.memory_session_id.as_deref(),
-            )
-            .await
-            .unwrap_or_default();
-
         if self.auto_save {
             let _ = self
                 .memory
@@ -941,11 +1005,19 @@ impl Agent {
         }
 
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-        let enriched = if context.is_empty() {
-            format!("[{now}] {user_message}")
-        } else {
-            format!("{context}[{now}] {user_message}")
-        };
+        let context_build = self.build_turn_context(user_message, format!("[{now}]")).await?;
+
+        if self.history.is_empty() {
+            if let Some(system_prompt) = context_build.context_package.system_prompt.clone() {
+                self.history
+                    .push(ConversationMessage::Chat(ChatMessage::system(system_prompt)));
+            }
+        }
+
+        let enriched = context_build
+            .context_package
+            .user_message
+            .unwrap_or_else(|| user_message.to_string());
 
         self.history
             .push(ConversationMessage::Chat(ChatMessage::user(enriched)));
@@ -1279,6 +1351,8 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::memory_loader::MemoryLoader;
+    use crate::hooks::{ContextHookResult, HookHandler};
     use async_trait::async_trait;
     use parking_lot::Mutex;
     use std::collections::HashMap;
@@ -1355,6 +1429,93 @@ mod tests {
         }
     }
 
+    struct RequestCaptureProvider {
+        seen_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    }
+
+    #[async_trait]
+    impl Provider for RequestCaptureProvider {
+        async fn chat_with_system(
+            &self,
+            _system_prompt: Option<&str>,
+            _message: &str,
+            _model: &str,
+            _temperature: f64,
+        ) -> Result<String> {
+            Ok("ok".into())
+        }
+
+        async fn chat(
+            &self,
+            request: ChatRequest<'_>,
+            _model: &str,
+            _temperature: f64,
+        ) -> Result<crate::providers::ChatResponse> {
+            *self.seen_messages.lock() = request.messages.to_vec();
+            Ok(crate::providers::ChatResponse {
+                text: Some("captured".into()),
+                tool_calls: vec![],
+                usage: None,
+                reasoning_content: None,
+            })
+        }
+    }
+
+    struct StaticMemoryLoader {
+        context: String,
+    }
+
+    #[async_trait]
+    impl MemoryLoader for StaticMemoryLoader {
+        async fn load_context(
+            &self,
+            _memory: &dyn Memory,
+            _user_message: &str,
+            _session_id: Option<&str>,
+        ) -> Result<String> {
+            Ok(self.context.clone())
+        }
+    }
+
+    struct ContextInjectingHook;
+
+    #[async_trait]
+    impl HookHandler for ContextInjectingHook {
+        fn name(&self) -> &str {
+            "context-injecting-hook"
+        }
+
+        async fn on_context_build_start(
+            &self,
+            _build_reason: ContextBuildReason,
+        ) -> HookResult<ContextHookResult> {
+            HookResult::Continue(ContextHookResult {
+                proposed_items: vec![
+                    ContextItem::new(
+                        "hook-system",
+                        ContextSourceType::HookContribution,
+                        ContextTarget::SystemPrompt,
+                        "hook_context",
+                        "## Hook Context\n\nInjected system guidance",
+                    )
+                    .with_priority(95),
+                    ContextItem::new(
+                        "hook-user",
+                        ContextSourceType::HookContribution,
+                        ContextTarget::UserMessage,
+                        "hook_context",
+                        "[Hook note]\nUse extra caution",
+                    )
+                    .with_priority(75),
+                ],
+                ranking_hints: Vec::new(),
+                redaction_hints: Vec::new(),
+                budget_hints: Vec::new(),
+                diagnostics: Vec::new(),
+            })
+        }
+    }
+
     struct MockTool;
 
     #[async_trait]
@@ -1413,6 +1574,101 @@ mod tests {
 
         let response = agent.turn("hi").await.unwrap();
         assert_eq!(response, "hello");
+    }
+
+    #[tokio::test]
+    async fn turn_routes_prompt_and_memory_through_context_builder() {
+        let seen_messages = Arc::new(Mutex::new(Vec::new()));
+        let provider = Box::new(RequestCaptureProvider {
+            seen_messages: seen_messages.clone(),
+        });
+
+        let memory_cfg = crate::config::MemoryConfig {
+            backend: "none".into(),
+            ..crate::config::MemoryConfig::default()
+        };
+        let mem: Arc<dyn Memory> = Arc::from(
+            crate::memory::create_memory(&memory_cfg, std::path::Path::new("/tmp"), None)
+                .expect("memory creation should succeed with valid config"),
+        );
+
+        let observer: Arc<dyn Observer> = Arc::from(crate::observability::NoopObserver {});
+        let mut agent = Agent::builder()
+            .provider(provider)
+            .tools(vec![Box::new(MockTool)])
+            .memory(mem)
+            .observer(observer)
+            .memory_loader(Box::new(StaticMemoryLoader {
+                context: "[Memory context]\n- preference: concise\n[/Memory context]\n".into(),
+            }))
+            .tool_dispatcher(Box::new(XmlToolDispatcher))
+            .workspace_dir(std::path::PathBuf::from("/tmp"))
+            .build()
+            .expect("agent builder should succeed with valid config");
+
+        let response = agent.turn("hi").await.unwrap();
+        assert_eq!(response, "captured");
+
+        let seen = seen_messages.lock();
+        assert!(
+            seen.iter().any(|message| {
+                message.role == "system" && message.content.contains("## Tools")
+            }),
+            "system prompt should still be emitted via the context package"
+        );
+        let user_message = seen
+            .iter()
+            .rfind(|message| message.role == "user")
+            .expect("user message");
+        assert!(user_message.content.contains("[Memory context]"));
+        assert!(user_message.content.contains("[CURRENT DATE & TIME:"));
+        assert!(user_message.content.contains("hi"));
+    }
+
+    #[tokio::test]
+    async fn turn_includes_hook_contributions_via_context_builder() {
+        let seen_messages = Arc::new(Mutex::new(Vec::new()));
+        let provider = Box::new(RequestCaptureProvider {
+            seen_messages: seen_messages.clone(),
+        });
+
+        let memory_cfg = crate::config::MemoryConfig {
+            backend: "none".into(),
+            ..crate::config::MemoryConfig::default()
+        };
+        let mem: Arc<dyn Memory> = Arc::from(
+            crate::memory::create_memory(&memory_cfg, std::path::Path::new("/tmp"), None)
+                .expect("memory creation should succeed with valid config"),
+        );
+
+        let mut runner = HookRunner::new();
+        runner.register(Box::new(ContextInjectingHook));
+
+        let observer: Arc<dyn Observer> = Arc::from(crate::observability::NoopObserver {});
+        let mut agent = Agent::builder()
+            .provider(provider)
+            .tools(vec![Box::new(MockTool)])
+            .memory(mem)
+            .observer(observer)
+            .hooks(Some(Arc::new(runner)))
+            .tool_dispatcher(Box::new(XmlToolDispatcher))
+            .workspace_dir(std::path::PathBuf::from("/tmp"))
+            .build()
+            .expect("agent builder should succeed with valid config");
+
+        let response = agent.turn("hooked").await.unwrap();
+        assert_eq!(response, "captured");
+
+        let seen = seen_messages.lock();
+        assert!(seen.iter().any(|message| {
+            message.role == "system" && message.content.contains("Injected system guidance")
+        }));
+        let user_message = seen
+            .iter()
+            .rfind(|message| message.role == "user")
+            .expect("user message");
+        assert!(user_message.content.contains("[Hook note]"));
+        assert!(user_message.content.contains("hooked"));
     }
 
     #[tokio::test]

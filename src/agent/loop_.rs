@@ -5,6 +5,8 @@ use crate::i18n::ToolDescriptions;
 use crate::memory::{self, Memory, MemoryCategory, decay};
 use crate::multimodal;
 use crate::observability::{self, Observer, ObserverEvent, runtime_trace};
+use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::providers::traits::StreamEvent;
 use crate::providers::{
     self, ChatMessage, ChatRequest, Provider, ProviderCapabilityError, ToolCall,
@@ -85,6 +87,187 @@ fn glob_match(pattern: &str, name: &str) -> bool {
                 && name.len() >= prefix.len() + suffix.len()
         }
     }
+}
+
+fn tool_result_source_type(tool_name: &str) -> ContextSourceType {
+    if tool_name == "read_skill" {
+        ContextSourceType::SkillBody
+    } else if tool_name == "delegate" {
+        ContextSourceType::AgentResult
+    } else {
+        ContextSourceType::ToolResult
+    }
+}
+
+fn tool_result_build_reason(tool_calls: &[ParsedToolCall]) -> ContextBuildReason {
+    if tool_calls.iter().any(|call| call.name == "read_skill") {
+        ContextBuildReason::SkillBodyReentry
+    } else if tool_calls.iter().any(|call| call.name == "delegate") {
+        ContextBuildReason::AgentResultReentry
+    } else {
+        ContextBuildReason::ToolResultReentry
+    }
+}
+
+fn build_tool_result_history_messages(
+    use_native_tools: bool,
+    has_native_tool_calls: bool,
+    tool_calls: &[ParsedToolCall],
+    native_tool_calls: &[ToolCall],
+    individual_results: &[(Option<String>, String)],
+    tool_results: String,
+) -> Vec<ChatMessage> {
+    let mut messages = Vec::new();
+
+    if !has_native_tool_calls {
+        let all_results_have_ids = use_native_tools
+            && !individual_results.is_empty()
+            && individual_results
+                .iter()
+                .all(|(tool_call_id, _)| tool_call_id.is_some());
+        if all_results_have_ids {
+            let mut builder = ContextBuilder::new(tool_result_build_reason(tool_calls));
+            for (index, (tool_call_id, result)) in individual_results.iter().enumerate() {
+                builder.push(
+                    ContextItem::new(
+                        format!("tool-message-{index}"),
+                        tool_result_source_type(
+                            tool_calls
+                                .get(index)
+                                .map(|call| call.name.as_str())
+                                .unwrap_or("tool"),
+                        ),
+                        ContextTarget::ToolMessage,
+                        "tool_result_reentry",
+                        serde_json::json!({
+                            "tool_call_id": tool_call_id,
+                            "content": result,
+                        })
+                        .to_string(),
+                    )
+                    .with_priority(100_u32.saturating_sub(index as u32)),
+                );
+            }
+            messages.extend(
+                builder
+                    .build()
+                    .context_package
+                    .tool_messages
+                    .into_iter()
+                    .map(ChatMessage::tool),
+            );
+        } else {
+            let mut builder = ContextBuilder::new(tool_result_build_reason(tool_calls));
+            builder.push(
+                ContextItem::new(
+                    "tool-results-block",
+                    ContextSourceType::ToolResult,
+                    ContextTarget::UserMessage,
+                    "tool_result_reentry",
+                    tool_results,
+                )
+                .with_priority(100),
+            );
+            if let Some(user_message) = builder.build().context_package.user_message {
+                messages.push(ChatMessage::user(user_message));
+            }
+        }
+    } else {
+        let mut builder = ContextBuilder::new(tool_result_build_reason(tool_calls));
+        for (index, (native_call, (_, result))) in native_tool_calls
+            .iter()
+            .zip(individual_results.iter())
+            .enumerate()
+        {
+            builder.push(
+                ContextItem::new(
+                    format!("native-tool-message-{index}"),
+                    tool_result_source_type(
+                        tool_calls
+                            .get(index)
+                            .map(|call| call.name.as_str())
+                            .unwrap_or(native_call.name.as_str()),
+                    ),
+                    ContextTarget::ToolMessage,
+                    "tool_result_reentry",
+                    serde_json::json!({
+                        "tool_call_id": native_call.id,
+                        "content": result,
+                    })
+                    .to_string(),
+                )
+                .with_priority(100_u32.saturating_sub(index as u32)),
+            );
+        }
+        messages.extend(
+            builder
+                .build()
+                .context_package
+                .tool_messages
+                .into_iter()
+                .map(ChatMessage::tool),
+        );
+    }
+
+    messages
+}
+
+fn compose_turn_user_message(
+    memory_context: String,
+    hardware_context: String,
+    timestamp_prefix: String,
+    user_message: String,
+) -> String {
+    let mut builder = ContextBuilder::new(ContextBuildReason::TurnGeneration);
+
+    if !memory_context.trim().is_empty() {
+        builder.push(
+            ContextItem::new(
+                "loop.memory_context",
+                ContextSourceType::Memory,
+                ContextTarget::UserMessage,
+                "memory_recall",
+                memory_context,
+            )
+            .with_priority(90),
+        );
+    }
+
+    if !hardware_context.trim().is_empty() {
+        builder.push(
+            ContextItem::new(
+                "loop.hardware_context",
+                ContextSourceType::RuntimeDirective,
+                ContextTarget::UserMessage,
+                "hardware_rag",
+                hardware_context,
+            )
+            .with_priority(80),
+        );
+    }
+
+    builder.push(
+        ContextItem::new(
+            "loop.current_datetime",
+            ContextSourceType::RuntimeDirective,
+            ContextTarget::UserMessage,
+            "turn_generation",
+            timestamp_prefix,
+        )
+        .with_priority(70),
+    );
+    builder.push(
+        ContextItem::new(
+            "loop.user_message",
+            ContextSourceType::UserMessage,
+            ContextTarget::UserMessage,
+            "turn_generation",
+            user_message,
+        )
+        .with_priority(60),
+    );
+
+    builder.build().context_package.user_message.unwrap_or_default()
 }
 
 /// Returns the subset of `tool_specs` that should be sent to the LLM for this turn.
@@ -3344,34 +3527,14 @@ pub(crate) async fn run_tool_call_loop(
         // reconstruct proper OpenAI-format tool_calls and tool result messages.
         // Prompt mode: use XML-based text format as before.
         history.push(ChatMessage::assistant(assistant_history_content));
-        if native_tool_calls.is_empty() {
-            let all_results_have_ids = use_native_tools
-                && !individual_results.is_empty()
-                && individual_results
-                    .iter()
-                    .all(|(tool_call_id, _)| tool_call_id.is_some());
-            if all_results_have_ids {
-                for (tool_call_id, result) in &individual_results {
-                    let tool_msg = serde_json::json!({
-                        "tool_call_id": tool_call_id,
-                        "content": result,
-                    });
-                    history.push(ChatMessage::tool(tool_msg.to_string()));
-                }
-            } else {
-                history.push(ChatMessage::user(format!("[Tool results]\n{tool_results}")));
-            }
-        } else {
-            for (native_call, (_, result)) in
-                native_tool_calls.iter().zip(individual_results.iter())
-            {
-                let tool_msg = serde_json::json!({
-                    "tool_call_id": native_call.id,
-                    "content": result,
-                });
-                history.push(ChatMessage::tool(tool_msg.to_string()));
-            }
-        }
+        history.extend(build_tool_result_history_messages(
+            use_native_tools,
+            !native_tool_calls.is_empty(),
+            &tool_calls,
+            &native_tool_calls,
+            &individual_results,
+            format!("[Tool results]\n{tool_results}"),
+        ));
     }
 
     runtime_trace::record_event(
@@ -3924,13 +4087,13 @@ pub async fn run(
             .as_ref()
             .map(|r| build_hardware_context(r, &effective_msg, &board_names, rag_limit))
             .unwrap_or_default();
-        let context = format!("{mem_context}{hw_context}");
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-        let enriched = if context.is_empty() {
-            format!("[{now}] {effective_msg}")
-        } else {
-            format!("{context}[{now}] {effective_msg}")
-        };
+        let enriched = compose_turn_user_message(
+            mem_context,
+            hw_context,
+            format!("[{now}]"),
+            effective_msg.clone(),
+        );
 
         let mut history = vec![
             ChatMessage::system(&system_prompt),
@@ -4202,13 +4365,13 @@ pub async fn run(
                 .as_ref()
                 .map(|r| build_hardware_context(r, &effective_input, &board_names, rag_limit))
                 .unwrap_or_default();
-            let context = format!("{mem_context}{hw_context}");
             let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-            let enriched = if context.is_empty() {
-                format!("[{now}] {effective_input}")
-            } else {
-                format!("{context}[{now}] {effective_input}")
-            };
+            let enriched = compose_turn_user_message(
+                mem_context,
+                hw_context,
+                format!("[{now}]"),
+                effective_input.clone(),
+            );
 
             history.push(ChatMessage::user(&enriched));
 
@@ -4751,13 +4914,13 @@ pub async fn process_message(
         .as_ref()
         .map(|r| build_hardware_context(r, effective_msg_ref, &board_names, rag_limit))
         .unwrap_or_default();
-    let context = format!("{mem_context}{hw_context}");
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-    let enriched = if context.is_empty() {
-        format!("[{now}] {effective_message}")
-    } else {
-        format!("{context}[{now}] {effective_message}")
-    };
+    let enriched = compose_turn_user_message(
+        mem_context,
+        hw_context,
+        format!("[{now}]"),
+        effective_message.clone(),
+    );
 
     let mut history = vec![
         ChatMessage::system(&system_prompt),
@@ -8842,6 +9005,78 @@ Let me check the result."#;
             system_prompt.contains("## Your Task"),
             "Native prompt should contain task instructions"
         );
+    }
+
+    #[test]
+    fn tool_result_history_messages_preserve_prompt_mode_order_via_context_builder() {
+        let messages = build_tool_result_history_messages(
+            false,
+            false,
+            &[
+                ParsedToolCall {
+                    name: "alpha".into(),
+                    arguments: serde_json::json!({}),
+                    tool_call_id: None,
+                },
+                ParsedToolCall {
+                    name: "beta".into(),
+                    arguments: serde_json::json!({}),
+                    tool_call_id: None,
+                },
+            ],
+            &[],
+            &[(None, "first".into()), (None, "second".into())],
+            "[Tool results]\n<tool_result name=\"alpha\">first</tool_result>\n<tool_result name=\"beta\">second</tool_result>\n".into(),
+        );
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, "user");
+        let alpha = messages[0].content.find("name=\"alpha\"").unwrap();
+        let beta = messages[0].content.find("name=\"beta\"").unwrap();
+        assert!(alpha < beta);
+    }
+
+    #[test]
+    fn tool_result_history_messages_emit_native_tool_messages_via_context_builder() {
+        let messages = build_tool_result_history_messages(
+            true,
+            false,
+            &[ParsedToolCall {
+                name: "shell".into(),
+                arguments: serde_json::json!({}),
+                tool_call_id: Some("tc-1".into()),
+            }],
+            &[],
+            &[(Some("tc-1".into()), "ok".into())],
+            String::new(),
+        );
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, "tool");
+        assert!(messages[0].content.contains("\"tool_call_id\":\"tc-1\""));
+        assert!(messages[0].content.contains("\"content\":\"ok\""));
+    }
+
+    #[test]
+    fn compose_turn_user_message_routes_runtime_and_memory_context_through_builder() {
+        let enriched = compose_turn_user_message(
+            "[Memory context]\n- key: value\n[/Memory context]\n".into(),
+            "[Hardware context]\n- board: nucleo\n[/Hardware context]\n".into(),
+            "[2026-04-22 12:00:00 CST]".into(),
+            "hello".into(),
+        );
+
+        assert!(enriched.contains("[Memory context]"));
+        assert!(enriched.contains("[Hardware context]"));
+        assert!(enriched.contains("[2026-04-22 12:00:00 CST]"));
+        assert!(enriched.contains("hello"));
+        let memory_index = enriched.find("[Memory context]").unwrap();
+        let hardware_index = enriched.find("[Hardware context]").unwrap();
+        let timestamp_index = enriched.find("[2026-04-22 12:00:00 CST]").unwrap();
+        let message_index = enriched.rfind("hello").unwrap();
+        assert!(memory_index < hardware_index);
+        assert!(hardware_index < timestamp_index);
+        assert!(timestamp_index < message_index);
     }
 
     // ── Cross-Alias & GLM Shortened Body Tests ──────────────────────────

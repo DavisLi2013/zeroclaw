@@ -1,4 +1,5 @@
 use crate::memory::{self, Memory, decay};
+use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
 use async_trait::async_trait;
 use std::fmt::Write;
 
@@ -10,6 +11,29 @@ pub trait MemoryLoader: Send + Sync {
         user_message: &str,
         session_id: Option<&str>,
     ) -> anyhow::Result<String>;
+
+    async fn load_context_item(
+        &self,
+        memory: &dyn Memory,
+        user_message: &str,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<Option<ContextItem>> {
+        let content = self.load_context(memory, user_message, session_id).await?;
+        if content.trim().is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(
+            ContextItem::new(
+                "user_memory",
+                ContextSourceType::Memory,
+                ContextTarget::UserMessage,
+                "memory_recall",
+                content,
+            )
+            .with_priority(80),
+        ))
+    }
 }
 
 pub struct DefaultMemoryLoader {
@@ -83,6 +107,7 @@ impl MemoryLoader for DefaultMemoryLoader {
 mod tests {
     use super::*;
     use crate::memory::{Memory, MemoryCategory, MemoryEntry};
+    use crate::orchestrator::context::{ContextSourceType, ContextTarget};
     use std::sync::Arc;
 
     struct MockMemory;
@@ -258,5 +283,19 @@ mod tests {
         assert!(context.contains("user_fact"));
         assert!(!context.contains("assistant_resp_legacy"));
         assert!(!context.contains("fabricated detail"));
+    }
+
+    #[tokio::test]
+    async fn default_loader_wraps_context_as_context_item() {
+        let loader = DefaultMemoryLoader::default();
+        let item = loader
+            .load_context_item(&MockMemory, "hello", Some("session-1"))
+            .await
+            .unwrap()
+            .expect("memory item");
+
+        assert_eq!(item.source_type, ContextSourceType::Memory);
+        assert_eq!(item.target, ContextTarget::UserMessage);
+        assert!(item.content.contains("[Memory context]"));
     }
 }

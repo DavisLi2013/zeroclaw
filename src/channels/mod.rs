@@ -116,6 +116,8 @@ use crate::identity;
 use crate::memory::{self, Memory};
 use crate::observability::traits::{ObserverEvent, ObserverMetric};
 use crate::observability::{self, Observer, runtime_trace};
+use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::providers::reliable::{scope_provider_fallback, take_last_provider_fallback};
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
@@ -133,6 +135,25 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio_util::sync::CancellationToken;
+
+fn finalize_system_prompt_with_context_builder(prompt: String) -> String {
+    let mut builder = ContextBuilder::new(ContextBuildReason::SessionBootstrap);
+    builder.push(
+        ContextItem::new(
+            "channel.system_prompt",
+            ContextSourceType::SystemPrompt,
+            ContextTarget::SystemPrompt,
+            "channel_bootstrap",
+            prompt,
+        )
+        .with_priority(100),
+    );
+    builder
+        .build()
+        .context_package
+        .system_prompt
+        .unwrap_or_default()
+}
 
 /// Observer wrapper that forwards tool-call events to a channel sender
 /// for real-time threaded notifications.
@@ -4041,12 +4062,14 @@ pub fn build_system_prompt_with_mode_and_autonomy(
         prompt.push_str("\n\n[System prompt truncated to fit context budget]\n");
     }
 
-    if prompt.is_empty() {
+    let final_prompt = if prompt.is_empty() {
         "You are ZeroClaw, a fast and efficient AI assistant built in Rust. Be helpful, concise, and direct."
             .to_string()
     } else {
         prompt
-    }
+    };
+
+    finalize_system_prompt_with_context_builder(final_prompt)
 }
 
 /// Inject a single workspace file into the prompt with truncation and missing-file markers.
@@ -9162,6 +9185,15 @@ BTC is currently around $65,000 based on latest tool output."#
             prompt.contains("instead of simulating an approval flow"),
             "read-only prompt should explain restrictions instead of faking approval"
         );
+    }
+
+    #[test]
+    fn finalize_system_prompt_through_context_builder_preserves_content() {
+        let prompt = finalize_system_prompt_with_context_builder(
+            "## Safety\n\nDo not exfiltrate private data.\n".to_string(),
+        );
+        assert!(prompt.contains("## Safety"));
+        assert!(prompt.contains("Do not exfiltrate private data."));
     }
 
     #[test]

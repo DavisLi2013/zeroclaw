@@ -2,6 +2,7 @@ use crate::agent::personality;
 use crate::config::IdentityConfig;
 use crate::i18n::ToolDescriptions;
 use crate::identity;
+use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
 use crate::security::AutonomyLevel;
 use crate::skills::Skill;
 use crate::tools::Tool;
@@ -75,6 +76,20 @@ impl SystemPromptBuilder {
             output.push_str("\n\n");
         }
         Ok(output)
+    }
+
+    pub fn build_context_item(&self, ctx: &PromptContext<'_>) -> Result<ContextItem> {
+        let content = self.build(ctx)?;
+        Ok(
+            ContextItem::new(
+                "system_prompt",
+                ContextSourceType::SystemPrompt,
+                ContextTarget::SystemPrompt,
+                "system_prompt",
+                content,
+            )
+            .with_priority(100),
+        )
     }
 }
 
@@ -299,6 +314,7 @@ impl PromptSection for ChannelMediaSection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::orchestrator::context::{ContextSourceType, ContextTarget};
     use crate::tools::traits::Tool;
     use async_trait::async_trait;
 
@@ -395,6 +411,31 @@ mod tests {
         assert!(prompt.contains("## Tools"));
         assert!(prompt.contains("test_tool"));
         assert!(prompt.contains("instr"));
+    }
+
+    #[test]
+    fn prompt_builder_exports_system_prompt_as_context_item() {
+        let tools: Vec<Box<dyn Tool>> = vec![Box::new(TestTool)];
+        let ctx = PromptContext {
+            workspace_dir: Path::new("/tmp"),
+            model_name: "test-model",
+            tools: &tools,
+            skills: &[],
+            skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            identity_config: None,
+            dispatcher_instructions: "instr",
+            tool_descriptions: None,
+            security_summary: None,
+            autonomy_level: AutonomyLevel::Supervised,
+        };
+
+        let item = SystemPromptBuilder::with_defaults()
+            .build_context_item(&ctx)
+            .unwrap();
+
+        assert_eq!(item.source_type, ContextSourceType::SystemPrompt);
+        assert_eq!(item.target, ContextTarget::SystemPrompt);
+        assert!(item.content.contains("## Tools"));
     }
 
     #[test]

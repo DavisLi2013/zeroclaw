@@ -3,6 +3,8 @@ use serde_json::Value;
 use std::time::Duration;
 
 use crate::channels::traits::ChannelMessage;
+use crate::orchestrator::context::ContextItem;
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
 
@@ -17,6 +19,15 @@ impl<T> HookResult<T> {
     pub fn is_cancel(&self) -> bool {
         matches!(self, HookResult::Cancel(_))
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ContextHookResult {
+    pub proposed_items: Vec<ContextItem>,
+    pub ranking_hints: Vec<String>,
+    pub redaction_hints: Vec<String>,
+    pub budget_hints: Vec<String>,
+    pub diagnostics: Vec<String>,
 }
 
 /// Trait for hook handlers. All methods have default no-op implementations.
@@ -38,6 +49,12 @@ pub trait HookHandler: Send + Sync {
     async fn on_after_tool_call(&self, _tool: &str, _result: &ToolResult, _duration: Duration) {}
     async fn on_message_sent(&self, _channel: &str, _recipient: &str, _content: &str) {}
     async fn on_heartbeat_tick(&self) {}
+    async fn on_context_build_start(
+        &self,
+        _build_reason: ContextBuildReason,
+    ) -> HookResult<ContextHookResult> {
+        HookResult::Continue(ContextHookResult::default())
+    }
 
     // --- Modifying hooks (sequential by priority, can cancel) ---
     async fn before_model_resolve(

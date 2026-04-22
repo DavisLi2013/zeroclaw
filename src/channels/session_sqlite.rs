@@ -102,6 +102,42 @@ impl SqliteSessionBackend {
                 "ALTER TABLE session_metadata ADD COLUMN turn_started_at TEXT",
                 [],
             );
+            let _ = conn.execute(
+                "ALTER TABLE session_metadata ADD COLUMN queue_depth INTEGER NOT NULL DEFAULT 0",
+                [],
+            );
+            let _ = conn.execute(
+                "ALTER TABLE session_metadata ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0",
+                [],
+            );
+        }
+
+        let has_queue_depth: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('session_metadata') WHERE name = 'queue_depth'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !has_queue_depth {
+            let _ = conn.execute(
+                "ALTER TABLE session_metadata ADD COLUMN queue_depth INTEGER NOT NULL DEFAULT 0",
+                [],
+            );
+        }
+
+        let has_cancel_requested: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('session_metadata') WHERE name = 'cancel_requested'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !has_cancel_requested {
+            let _ = conn.execute(
+                "ALTER TABLE session_metadata ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0",
+                [],
+            );
         }
 
         Ok(Self {
@@ -384,6 +420,8 @@ impl SessionBackend for SqliteSessionBackend {
         session_key: &str,
         state: &str,
         turn_id: Option<&str>,
+        queue_depth: usize,
+        cancel_requested: bool,
     ) -> std::io::Result<()> {
         let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
@@ -393,9 +431,17 @@ impl SessionBackend for SqliteSessionBackend {
             None
         };
         conn.execute(
-            "UPDATE session_metadata SET state = ?1, turn_id = ?2, turn_started_at = ?3
-             WHERE session_key = ?4",
-            params![state, turn_id, started_at, session_key],
+            "UPDATE session_metadata
+             SET state = ?1, turn_id = ?2, turn_started_at = ?3, queue_depth = ?4, cancel_requested = ?5
+             WHERE session_key = ?6",
+            params![
+                state,
+                turn_id,
+                started_at,
+                queue_depth as i64,
+                if cancel_requested { 1_i64 } else { 0_i64 },
+                session_key
+            ],
         )
         .map_err(std::io::Error::other)?;
         Ok(())
@@ -404,12 +450,15 @@ impl SessionBackend for SqliteSessionBackend {
     fn get_session_state(&self, session_key: &str) -> std::io::Result<Option<SessionState>> {
         let conn = self.conn.lock();
         conn.query_row(
-            "SELECT state, turn_id, turn_started_at FROM session_metadata WHERE session_key = ?1",
+            "SELECT state, turn_id, turn_started_at, queue_depth, cancel_requested
+             FROM session_metadata WHERE session_key = ?1",
             params![session_key],
             |row| {
                 let state: String = row.get(0)?;
                 let turn_id: Option<String> = row.get(1)?;
                 let started_str: Option<String> = row.get(2)?;
+                let queue_depth: i64 = row.get(3)?;
+                let cancel_requested: i64 = row.get(4)?;
                 let turn_started_at = started_str.and_then(|s| {
                     chrono::DateTime::parse_from_rfc3339(&s)
                         .ok()
@@ -419,6 +468,8 @@ impl SessionBackend for SqliteSessionBackend {
                     state,
                     turn_id,
                     turn_started_at,
+                    queue_depth: queue_depth.max(0) as usize,
+                    cancel_requested: cancel_requested != 0,
                 })
             },
         )
@@ -793,12 +844,14 @@ mod tests {
         backend.append("s1", &ChatMessage::user("hello")).unwrap();
 
         backend
-            .set_session_state("s1", "running", Some("turn-1"))
+            .set_session_state("s1", "running", Some("turn-1"), 0, false)
             .unwrap();
         let state = backend.get_session_state("s1").unwrap().unwrap();
         assert_eq!(state.state, "running");
         assert_eq!(state.turn_id.as_deref(), Some("turn-1"));
         assert!(state.turn_started_at.is_some());
+        assert_eq!(state.queue_depth, 0);
+        assert!(!state.cancel_requested);
     }
 
     #[test]
@@ -808,14 +861,18 @@ mod tests {
         backend.append("s1", &ChatMessage::user("hello")).unwrap();
 
         backend
-            .set_session_state("s1", "running", Some("turn-1"))
+            .set_session_state("s1", "running", Some("turn-1"), 0, false)
             .unwrap();
-        backend.set_session_state("s1", "idle", None).unwrap();
+        backend
+            .set_session_state("s1", "idle", None, 0, false)
+            .unwrap();
 
         let state = backend.get_session_state("s1").unwrap().unwrap();
         assert_eq!(state.state, "idle");
         assert!(state.turn_id.is_none());
         assert!(state.turn_started_at.is_none());
+        assert_eq!(state.queue_depth, 0);
+        assert!(!state.cancel_requested);
     }
 
     #[test]
@@ -825,15 +882,16 @@ mod tests {
         backend.append("s1", &ChatMessage::user("hello")).unwrap();
 
         backend
-            .set_session_state("s1", "running", Some("turn-1"))
+            .set_session_state("s1", "running", Some("turn-1"), 0, false)
             .unwrap();
         backend
-            .set_session_state("s1", "error", Some("turn-1"))
+            .set_session_state("s1", "error", Some("turn-1"), 0, true)
             .unwrap();
 
         let state = backend.get_session_state("s1").unwrap().unwrap();
         assert_eq!(state.state, "error");
         assert_eq!(state.turn_id.as_deref(), Some("turn-1"));
+        assert!(state.cancel_requested);
     }
 
     #[test]
@@ -846,10 +904,10 @@ mod tests {
         backend.append("s3", &ChatMessage::user("c")).unwrap();
 
         backend
-            .set_session_state("s1", "running", Some("t1"))
+            .set_session_state("s1", "running", Some("t1"), 1, false)
             .unwrap();
         backend
-            .set_session_state("s2", "running", Some("t2"))
+            .set_session_state("s2", "running", Some("t2"), 0, false)
             .unwrap();
         // s3 stays idle (default)
 
@@ -910,6 +968,25 @@ mod tests {
         // State should default to idle
         let state = backend2.get_session_state("s1").unwrap().unwrap();
         assert_eq!(state.state, "idle");
+        assert_eq!(state.queue_depth, 0);
+        assert!(!state.cancel_requested);
+    }
+
+    #[test]
+    fn session_state_persists_queue_depth_and_cancel_intent() {
+        let tmp = TempDir::new().unwrap();
+        let backend = SqliteSessionBackend::new(tmp.path()).unwrap();
+        backend.append("s1", &ChatMessage::user("hello")).unwrap();
+
+        backend
+            .set_session_state("s1", "cancelling", Some("turn-2"), 3, true)
+            .unwrap();
+
+        let state = backend.get_session_state("s1").unwrap().unwrap();
+        assert_eq!(state.state, "cancelling");
+        assert_eq!(state.turn_id.as_deref(), Some("turn-2"));
+        assert_eq!(state.queue_depth, 3);
+        assert!(state.cancel_requested);
     }
 
     #[test]

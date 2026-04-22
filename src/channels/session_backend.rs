@@ -102,6 +102,8 @@ pub trait SessionBackend: Send + Sync {
         _session_key: &str,
         _state: &str,
         _turn_id: Option<&str>,
+        _queue_depth: usize,
+        _cancel_requested: bool,
     ) -> std::io::Result<()> {
         Ok(())
     }
@@ -131,6 +133,10 @@ pub struct SessionState {
     pub turn_id: Option<String>,
     /// When the current state was entered.
     pub turn_started_at: Option<DateTime<Utc>>,
+    /// Number of queued turns waiting behind the active turn.
+    pub queue_depth: usize,
+    /// Whether a controlled cancellation was requested for the active turn.
+    pub cancel_requested: bool,
 }
 
 #[cfg(test)]
@@ -155,5 +161,19 @@ mod tests {
         let q = SessionQuery::default();
         assert!(q.keyword.is_none());
         assert!(q.limit.is_none());
+    }
+
+    #[test]
+    fn session_state_carries_queue_depth_and_cancel_intent() {
+        let state = SessionState {
+            state: "running".into(),
+            turn_id: Some("turn-1".into()),
+            turn_started_at: Some(Utc::now()),
+            queue_depth: 3,
+            cancel_requested: true,
+        };
+
+        assert_eq!(state.queue_depth, 3);
+        assert!(state.cancel_requested);
     }
 }

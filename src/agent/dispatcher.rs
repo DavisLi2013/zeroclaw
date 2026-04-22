@@ -1,8 +1,8 @@
 use crate::providers::{ChatMessage, ChatResponse, ConversationMessage, ToolResultMessage};
+use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::contracts::ContextBuildReason;
 use crate::tools::{Tool, ToolSpec};
 use serde_json::Value;
-use std::fmt::Write;
-
 #[derive(Debug, Clone)]
 pub struct ParsedToolCall {
     pub name: String,
@@ -116,16 +116,39 @@ impl ToolDispatcher for XmlToolDispatcher {
     }
 
     fn format_results(&self, results: &[ToolExecutionResult]) -> ConversationMessage {
-        let mut content = String::new();
-        for result in results {
+        let mut builder = ContextBuilder::new(context_build_reason_for_tool_results(results));
+        builder.push(
+            ContextItem::new(
+                "tool-results-header",
+                ContextSourceType::RuntimeDirective,
+                ContextTarget::UserMessage,
+                "tool_result_reentry",
+                "[Tool results]",
+            )
+            .with_priority(100),
+        );
+
+        for (index, result) in results.iter().enumerate() {
             let status = if result.success { "ok" } else { "error" };
-            let _ = writeln!(
-                content,
-                "<tool_result name=\"{}\" status=\"{}\">\n{}\n</tool_result>",
-                result.name, status, result.output
+            builder.push(
+                ContextItem::new(
+                    format!("tool-result-{index}"),
+                    context_source_for_tool_result(result),
+                    ContextTarget::UserMessage,
+                    "tool_result_reentry",
+                    format!(
+                        "<tool_result name=\"{}\" status=\"{}\">\n{}\n</tool_result>",
+                        result.name, status, result.output
+                    ),
+                )
+                .with_priority(90_u32.saturating_sub(index as u32)),
             );
         }
-        ConversationMessage::Chat(ChatMessage::user(format!("[Tool results]\n{content}")))
+
+        let context = builder.build();
+        ConversationMessage::Chat(ChatMessage::user(
+            context.context_package.user_message.unwrap_or_default(),
+        ))
     }
 
     fn prompt_instructions(&self, _tools: &[Box<dyn Tool>]) -> String {
@@ -149,15 +172,35 @@ impl ToolDispatcher for XmlToolDispatcher {
                     vec![ChatMessage::assistant(text.clone().unwrap_or_default())]
                 }
                 ConversationMessage::ToolResults(results) => {
-                    let mut content = String::new();
-                    for result in results {
-                        let _ = writeln!(
-                            content,
-                            "<tool_result id=\"{}\">\n{}\n</tool_result>",
-                            result.tool_call_id, result.content
+                    let mut builder = ContextBuilder::new(ContextBuildReason::ToolResultReentry);
+                    builder.push(
+                        ContextItem::new(
+                            "tool-results-header",
+                            ContextSourceType::RuntimeDirective,
+                            ContextTarget::UserMessage,
+                            "tool_result_reentry",
+                            "[Tool results]",
+                        )
+                        .with_priority(100),
+                    );
+                    for (index, result) in results.iter().enumerate() {
+                        builder.push(
+                            ContextItem::new(
+                                format!("tool-result-{index}"),
+                                ContextSourceType::ToolResult,
+                                ContextTarget::UserMessage,
+                                "tool_result_reentry",
+                                format!(
+                                    "<tool_result id=\"{}\">\n{}\n</tool_result>",
+                                    result.tool_call_id, result.content
+                                ),
+                            )
+                            .with_priority(90_u32.saturating_sub(index as u32)),
                         );
                     }
-                    vec![ChatMessage::user(format!("[Tool results]\n{content}"))]
+                    vec![ChatMessage::user(
+                        builder.build().context_package.user_message.unwrap_or_default(),
+                    )]
                 }
             })
             .collect()
@@ -231,14 +274,29 @@ impl ToolDispatcher for NativeToolDispatcher {
                 }
                 ConversationMessage::ToolResults(results) => results
                     .iter()
-                    .map(|result| {
-                        ChatMessage::tool(
-                            serde_json::json!({
-                                "tool_call_id": result.tool_call_id,
-                                "content": result.content,
-                            })
-                            .to_string(),
-                        )
+                    .flat_map(|result| {
+                        let mut builder = ContextBuilder::new(ContextBuildReason::ToolResultReentry);
+                        builder.push(
+                            ContextItem::new(
+                                format!("tool-result-{}", result.tool_call_id),
+                                ContextSourceType::ToolResult,
+                                ContextTarget::ToolMessage,
+                                "tool_result_reentry",
+                                serde_json::json!({
+                                    "tool_call_id": result.tool_call_id,
+                                    "content": result.content,
+                                })
+                                .to_string(),
+                            )
+                            .with_priority(100),
+                        );
+                        builder
+                            .build()
+                            .context_package
+                            .tool_messages
+                            .into_iter()
+                            .map(ChatMessage::tool)
+                            .collect::<Vec<_>>()
                     })
                     .collect(),
             })
@@ -247,6 +305,26 @@ impl ToolDispatcher for NativeToolDispatcher {
 
     fn should_send_tool_specs(&self) -> bool {
         true
+    }
+}
+
+fn context_source_for_tool_result(result: &ToolExecutionResult) -> ContextSourceType {
+    if result.name == "read_skill" {
+        ContextSourceType::SkillBody
+    } else if result.name == "delegate" {
+        ContextSourceType::AgentResult
+    } else {
+        ContextSourceType::ToolResult
+    }
+}
+
+fn context_build_reason_for_tool_results(results: &[ToolExecutionResult]) -> ContextBuildReason {
+    if results.iter().any(|result| result.name == "read_skill") {
+        ContextBuildReason::SkillBodyReentry
+    } else if results.iter().any(|result| result.name == "delegate") {
+        ContextBuildReason::AgentResultReentry
+    } else {
+        ContextBuildReason::ToolResultReentry
     }
 }
 
@@ -352,6 +430,7 @@ mod tests {
         };
         assert!(rendered.contains("<tool_result"));
         assert!(rendered.contains("shell"));
+        assert!(rendered.contains("[Tool results]"));
     }
 
     #[test]
@@ -371,6 +450,27 @@ mod tests {
             }
             _ => panic!("expected ToolResults variant"),
         }
+    }
+
+    #[test]
+    fn native_to_provider_messages_routes_tool_results_through_context_builder() {
+        let dispatcher = NativeToolDispatcher;
+        let history = vec![ConversationMessage::ToolResults(vec![
+            ToolResultMessage {
+                tool_call_id: "tc-1".into(),
+                content: "first".into(),
+            },
+            ToolResultMessage {
+                tool_call_id: "tc-2".into(),
+                content: "second".into(),
+            },
+        ])];
+
+        let messages = dispatcher.to_provider_messages(&history);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "tool");
+        assert!(messages[0].content.contains("\"tool_call_id\":\"tc-1\""));
+        assert!(messages[1].content.contains("\"tool_call_id\":\"tc-2\""));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

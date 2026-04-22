@@ -418,7 +418,7 @@ async fn process_chat_message(
     // Set session state to running
     let turn_id = uuid::Uuid::new_v4().to_string();
     if let Some(ref backend) = state.session_backend {
-        let _ = backend.set_session_state(session_key, "running", Some(&turn_id));
+        let _ = backend.set_session_state(session_key, "running", Some(&turn_id), 0, false);
     }
 
     // Channel for streaming turn events from the agent.
@@ -500,7 +500,7 @@ async fn process_chat_message(
 
             // Set session state to idle
             if let Some(ref backend) = state.session_backend {
-                let _ = backend.set_session_state(session_key, "idle", None);
+                let _ = backend.set_session_state(session_key, "idle", None, 0, false);
             }
 
             // Broadcast agent_end event
@@ -513,7 +513,7 @@ async fn process_chat_message(
         Err(e) => {
             // Set session state to error
             if let Some(ref backend) = state.session_backend {
-                let _ = backend.set_session_state(session_key, "error", Some(&turn_id));
+                let _ = backend.set_session_state(session_key, "error", Some(&turn_id), 0, false);
             }
 
             tracing::error!(error = %e, "Agent turn failed");

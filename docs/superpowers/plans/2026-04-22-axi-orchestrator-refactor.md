@@ -267,6 +267,11 @@ git commit -m "feat: add session runtime bundle contracts"
 
 ### Task 3: Extract a Unified ContextBuilder Layer
 
+Implementation note on 2026-04-22:
+- The initial landing uses a single `src/orchestrator/context.rs` module instead of separate `context_builder.rs` / `context_item.rs` files.
+- The minimal slice is intended to route system prompt, memory context, and turn user payload through `ContextBuilder` first.
+- Declarative hook-return contracts remain a follow-up once the builder is threaded through more sources.
+
 **Files:**
 - Create: `src/orchestrator/context_builder.rs`
 - Create: `src/orchestrator/context_item.rs`
