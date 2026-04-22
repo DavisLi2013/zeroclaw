@@ -1,0 +1,7 @@
+powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 --help
+$env:ZEROCLAW_API_KEY = "sk-9mYjfdrGia3EOoMGu2i6iEpNphM0gxcVhjSmcKZtXGgxYkWm"
+.\target\release\zeroclaw.exe agent --project-root D:\workspace\axi-research\zeroclaw -m "帮我总结这个项目"
+
+powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root D:\workspace\axi-research\zeroclaw -m "帮我总结这个项目"
+
+powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root D:\workspace\axi-research\zeroclaw 
