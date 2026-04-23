@@ -1,5 +1,9 @@
+pub mod butler;
 pub mod contracts;
 pub mod context;
 pub mod descriptors;
+pub mod host;
 pub mod safety;
+pub mod supervisor;
+pub mod recovery;
 pub mod session;

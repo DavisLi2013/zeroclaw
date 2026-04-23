@@ -10,7 +10,7 @@
 //! persistent Chrome profile can be configured so SSO sessions survive across
 //! invocations.
 
-use crate::security::SecurityPolicy;
+use crate::security::{NoopSandbox, SecurityPolicy, traits::Sandbox};
 use crate::tools::traits::{Tool, ToolResult};
 use async_trait::async_trait;
 use regex::Regex;
@@ -69,19 +69,36 @@ impl Default for BrowserDelegateConfig {
 pub struct BrowserDelegateTool {
     security: Arc<SecurityPolicy>,
     config: BrowserDelegateConfig,
+    sandbox: Arc<dyn Sandbox>,
 }
 
 impl BrowserDelegateTool {
     /// Create a new `BrowserDelegateTool` with the given security policy and config.
     pub fn new(security: Arc<SecurityPolicy>, config: BrowserDelegateConfig) -> Self {
-        Self { security, config }
+        Self::new_with_sandbox(security, config, Arc::new(NoopSandbox))
+    }
+
+    pub fn new_with_sandbox(
+        security: Arc<SecurityPolicy>,
+        config: BrowserDelegateConfig,
+        sandbox: Arc<dyn Sandbox>,
+    ) -> Self {
+        Self {
+            security,
+            config,
+            sandbox,
+        }
     }
 
     /// Build the CLI command for a browser task.
     ///
     /// Constructs a `tokio::process::Command` with the configured CLI binary,
     /// `--print` flag for non-interactive mode, and optional Chrome profile env.
-    fn build_command(&self, task: &str, url: Option<&str>) -> tokio::process::Command {
+    fn build_command(
+        &self,
+        task: &str,
+        url: Option<&str>,
+    ) -> anyhow::Result<tokio::process::Command> {
         let mut cmd = tokio::process::Command::new(&self.config.cli_binary);
 
         // Claude Code non-interactive mode
@@ -108,8 +125,11 @@ impl BrowserDelegateTool {
 
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
+        self.sandbox
+            .wrap_command(cmd.as_std_mut())
+            .map_err(|error| anyhow::anyhow!("Sandbox error: {}", error))?;
 
-        cmd
+        Ok(cmd)
     }
 
     /// Extract URLs from free-form text and validate each against domain policy.
@@ -299,7 +319,16 @@ impl Tool for BrowserDelegateTool {
             _ => task.to_string(),
         };
 
-        let mut cmd = self.build_command(&full_task, url);
+        let mut cmd = match self.build_command(&full_task, url) {
+            Ok(cmd) => cmd,
+            Err(error) => {
+                return Ok(ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(error.to_string()),
+                });
+            }
+        };
         // Ensure the subprocess is killed when the future is dropped (e.g. on timeout)
         cmd.kill_on_drop(true);
 
@@ -509,14 +538,14 @@ mod tests {
             ..BrowserDelegateConfig::default()
         };
         let tool = test_tool(config);
-        let cmd = tool.build_command("read inbox", None);
+        let cmd = tool.build_command("read inbox", None).unwrap();
         assert_eq!(cmd.as_std().get_program(), "my-browser-cli");
     }
 
     #[test]
     fn build_command_includes_print_flag() {
         let tool = test_tool(default_test_config());
-        let cmd = tool.build_command("read inbox", None);
+        let cmd = tool.build_command("read inbox", None).unwrap();
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
         assert!(args.contains(&std::ffi::OsStr::new("--print")));
     }
@@ -524,11 +553,13 @@ mod tests {
     #[test]
     fn build_command_includes_url_in_prompt() {
         let tool = test_tool(default_test_config());
-        let cmd = tool.build_command("read page", Some("https://example.com"));
+        let cmd = tool
+            .build_command("read page", Some("https://example.com"))
+            .unwrap();
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
-            .map(|a| a.to_string_lossy().to_string())
+            .map(|a: &std::ffi::OsStr| a.to_string_lossy().to_string())
             .collect();
         let prompt = args.last().unwrap();
         assert!(prompt.contains("https://example.com"));
@@ -542,7 +573,7 @@ mod tests {
             ..BrowserDelegateConfig::default()
         };
         let tool = test_tool(config);
-        let cmd = tool.build_command("task", None);
+        let cmd = tool.build_command("task", None).unwrap();
         let envs: Vec<_> = cmd.as_std().get_envs().collect();
         let chrome_env = envs
             .iter()
@@ -552,6 +583,91 @@ mod tests {
             chrome_env.unwrap().1,
             Some(std::ffi::OsStr::new("/tmp/chrome-profile"))
         );
+    }
+
+    #[test]
+    fn build_command_applies_sandbox_wrapper_when_configured() {
+        #[derive(Default)]
+        struct PrefixSandbox;
+
+        impl crate::security::traits::Sandbox for PrefixSandbox {
+            fn wrap_command(
+                &self,
+                cmd: &mut std::process::Command,
+            ) -> std::io::Result<()> {
+                let program = cmd.get_program().to_os_string();
+                let args = cmd.get_args().map(|arg| arg.to_os_string()).collect::<Vec<_>>();
+
+                *cmd = std::process::Command::new("sandbox-wrapper");
+                cmd.arg(program);
+                cmd.args(args);
+                Ok(())
+            }
+
+            fn is_available(&self) -> bool {
+                true
+            }
+
+            fn name(&self) -> &str {
+                "prefix"
+            }
+
+            fn description(&self) -> &str {
+                "prefix test sandbox"
+            }
+        }
+
+        let tool = BrowserDelegateTool::new_with_sandbox(
+            Arc::new(SecurityPolicy::default()),
+            default_test_config(),
+            Arc::new(PrefixSandbox),
+        );
+
+        let cmd = tool.build_command("read inbox", None).unwrap();
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a: &std::ffi::OsStr| a.to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(cmd.as_std().get_program(), "sandbox-wrapper");
+        assert_eq!(args.first().map(String::as_str), Some("claude"));
+    }
+
+    #[test]
+    fn build_command_returns_error_when_sandbox_wrap_fails() {
+        struct FailingSandbox;
+
+        impl crate::security::traits::Sandbox for FailingSandbox {
+            fn wrap_command(
+                &self,
+                _cmd: &mut std::process::Command,
+            ) -> std::io::Result<()> {
+                Err(std::io::Error::other("sandbox boom"))
+            }
+
+            fn is_available(&self) -> bool {
+                true
+            }
+
+            fn name(&self) -> &str {
+                "failing"
+            }
+
+            fn description(&self) -> &str {
+                "failing sandbox"
+            }
+        }
+
+        let tool = BrowserDelegateTool::new_with_sandbox(
+            Arc::new(SecurityPolicy::default()),
+            default_test_config(),
+            Arc::new(FailingSandbox),
+        );
+
+        let result = tool.build_command("read inbox", None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Sandbox error"));
     }
 
     // ── Task templates ──────────────────────────────────────────────

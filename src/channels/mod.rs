@@ -3298,6 +3298,8 @@ async fn process_channel_message(
                     "sender": msg.sender,
                     "elapsed_ms": started_at.elapsed().as_millis(),
                     "response": scrub_credentials(&delivered_response),
+                    "outbound_audit_allowed": outbound_audit_decision.allowed,
+                    "outbound_audit_labels": outbound_audit_decision.labels,
                 }),
             );
 

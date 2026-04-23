@@ -412,7 +412,7 @@ pub fn all_tools_with_runtime(
     let mut tool_arcs: Vec<Arc<dyn Tool>> = vec![
         Arc::new(RateLimitedTool::new(
             PathGuardedTool::new(
-                ShellTool::new_with_sandbox(security.clone(), runtime, sandbox)
+                ShellTool::new_with_sandbox(security.clone(), runtime, Arc::clone(&sandbox))
                     .with_timeout_secs(root_config.shell_tool.timeout_secs),
                 security.clone(),
             ),
@@ -529,9 +529,10 @@ pub fn all_tools_with_runtime(
     // Browser delegation tool (conditionally registered; requires shell access)
     if root_config.browser_delegate.enabled {
         if has_shell_access {
-            tool_arcs.push(Arc::new(BrowserDelegateTool::new(
+            tool_arcs.push(Arc::new(BrowserDelegateTool::new_with_sandbox(
                 security.clone(),
                 root_config.browser_delegate.clone(),
+                Arc::clone(&sandbox),
             )));
         } else {
             tracing::warn!(

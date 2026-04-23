@@ -492,11 +492,12 @@ Implementation note on 2026-04-22:
   - `OutboundSafetyAuditGate`
 - Current runtime integration is intentionally narrow:
   - `agent/loop_.rs` now rejects tool calls that are not present in the current visible tool surface.
-  - browser-style tools are marked as `Sandbox` by the gate contract, but execution still stays on the existing runtime path for now.
-  - `channels/mod.rs` now runs outbound responses through the outbound audit gate for label generation, without changing the existing sanitize-and-send behavior.
+  - browser-style tools are marked as `Sandbox` by the gate contract.
+  - `tools/browser_delegate.rs` now applies the existing sandbox backend to its spawned CLI subprocess and fails closed if sandbox wrapping cannot be applied.
+  - `channels/mod.rs` now runs outbound responses through the outbound audit gate for label generation and includes the resulting labels in `runtime_trace` egress metadata, without changing the existing sanitize-and-send behavior.
 - Deeper follow-up work for this task remains open:
-  - route sandbox-marked tools into a distinct isolated execution path
-  - connect outbound audit labels to structured audit logging / gateway egress metadata
+  - route additional sandbox-marked tools into distinct isolated execution paths
+  - connect outbound audit labels to structured audit logging / gateway egress metadata beyond runtime trace
   - consolidate existing `SecurityPolicy::enforce_tool_operation` checks behind the same gate contract
 
 **Files:**
@@ -577,6 +578,23 @@ git commit -m "feat: add orchestrator safety gates"
 ```
 
 ### Task 6: Add Butler/User Host Supervision and Recovery Metadata
+
+Implementation note on 2026-04-22:
+- The first Task 6 landing stays at the orchestrator contract layer and does not yet rewire daemon or gateway startup.
+- Added minimal orchestration types:
+  - `src/orchestrator/butler.rs` -> `ButlerRuntimeHandle`
+  - `src/orchestrator/host.rs` -> `UserHost`
+  - `src/orchestrator/supervisor.rs` -> `ButlerDirectory`
+  - `src/orchestrator/recovery.rs` -> `RecoveryCursor`
+- This slice establishes:
+  - one-active-butler-per-user registration semantics
+  - explicit binding between user, butler, and host ids
+  - session membership on a user host
+  - recovery cursor tracking for descriptor version sets and the last turn id
+- Remaining Task 6 work stays open:
+  - integrate these contracts into daemon/gateway runtime startup and recovery flows
+  - persist recovery cursors through session/backend state transitions
+  - connect butler/host supervision to real multi-user runtime ownership rather than contract-only handles
 
 **Files:**
 - Create: `src/orchestrator/supervisor.rs`
