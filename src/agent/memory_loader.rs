@@ -1,5 +1,5 @@
 use crate::memory::{self, Memory, decay};
-use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::{ContextItem, ContextSourceType, ContextTarget};
 use async_trait::async_trait;
 use std::fmt::Write;
 

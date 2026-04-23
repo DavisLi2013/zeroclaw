@@ -104,6 +104,7 @@ mod migration;
 mod multimodal;
 mod observability;
 mod onboard;
+mod orchestrator;
 mod peripherals;
 #[cfg(feature = "plugins-wasm")]
 mod plugins;

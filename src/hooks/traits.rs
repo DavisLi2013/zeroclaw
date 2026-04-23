@@ -3,8 +3,8 @@ use serde_json::Value;
 use std::time::Duration;
 
 use crate::channels::traits::ChannelMessage;
-use crate::orchestrator::context::ContextItem;
-use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::ContextItem;
+use crate::orchestrator::ContextBuildReason;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
 

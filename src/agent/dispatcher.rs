@@ -1,6 +1,6 @@
 use crate::providers::{ChatMessage, ChatResponse, ConversationMessage, ToolResultMessage};
-use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
-use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::ContextBuildReason;
 use crate::tools::{Tool, ToolSpec};
 use serde_json::Value;
 #[derive(Debug, Clone)]

@@ -8,8 +8,8 @@ use crate::hooks::{HookResult, HookRunner};
 use crate::i18n::ToolDescriptions;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::observability::{self, Observer, ObserverEvent};
-use crate::orchestrator::context::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
-use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::{ContextBuilder, ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::ContextBuildReason;
 use crate::providers::{self, ChatMessage, ChatRequest, ConversationMessage, Provider};
 use crate::runtime;
 use crate::security::SecurityPolicy;
@@ -633,7 +633,7 @@ impl Agent {
         &self,
         user_message: &str,
         timestamp_prefix: impl Into<String>,
-    ) -> Result<crate::orchestrator::context::ContextBuildResult> {
+    ) -> Result<crate::orchestrator::ContextBuildResult> {
         let mut builder = ContextBuilder::new(ContextBuildReason::TurnGeneration);
 
         if self.history.is_empty() {

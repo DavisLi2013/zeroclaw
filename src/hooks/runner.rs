@@ -6,8 +6,8 @@ use std::panic::AssertUnwindSafe;
 use tracing::info;
 
 use crate::channels::traits::ChannelMessage;
-use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
-use crate::orchestrator::contracts::ContextBuildReason;
+use crate::orchestrator::{ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::ContextBuildReason;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
 

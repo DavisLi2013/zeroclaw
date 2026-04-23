@@ -2,7 +2,7 @@ use crate::agent::personality;
 use crate::config::IdentityConfig;
 use crate::i18n::ToolDescriptions;
 use crate::identity;
-use crate::orchestrator::context::{ContextItem, ContextSourceType, ContextTarget};
+use crate::orchestrator::{ContextItem, ContextSourceType, ContextTarget};
 use crate::security::AutonomyLevel;
 use crate::skills::Skill;
 use crate::tools::Tool;
