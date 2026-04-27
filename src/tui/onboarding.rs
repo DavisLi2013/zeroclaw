@@ -12,7 +12,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Paragraph},
 };
-use std::io::{self, IsTerminal};
+use std::io::{self};
 
 use crate::config::Config;
 use crate::config::schema::{
