@@ -31,54 +31,79 @@
     clippy::unnecessary_map_or,
     clippy::unused_self,
     clippy::cast_precision_loss,
-    clippy::unnecessary_wraps,
-    dead_code
+    clippy::unnecessary_wraps
 )]
 
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "agent-runtime")]
 pub mod agent;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod approval;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod auth;
+#[cfg(feature = "agent-runtime")]
 pub mod channels;
-pub(crate) mod cli_input;
 pub mod commands;
 pub mod config;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod cost;
+#[cfg(feature = "agent-runtime")]
 pub mod cron;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod daemon;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod doctor;
+#[cfg(feature = "gateway")]
 pub mod gateway;
+#[cfg(feature = "agent-runtime")]
 pub mod hands;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod hardware;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod health;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod heartbeat;
+#[cfg(feature = "agent-runtime")]
 pub mod hooks;
-pub mod i18n;
-pub(crate) mod identity;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod integrations;
 pub mod memory;
-pub(crate) mod migration;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod multimodal;
+#[cfg(feature = "agent-runtime")]
 pub mod nodes;
+#[cfg(feature = "agent-runtime")]
 pub mod observability;
-pub mod orchestrator;
-pub(crate) mod onboard;
+#[cfg(feature = "agent-runtime")]
+pub mod orchestrator {
+    pub use zeroclaw_runtime::orchestrator::*;
+}
+#[cfg(feature = "agent-runtime")]
 pub mod peripherals;
+#[cfg(feature = "agent-runtime")]
+pub mod platform;
 pub mod providers;
+#[cfg(feature = "agent-runtime")]
 pub mod rag;
+#[cfg(feature = "agent-runtime")]
 pub mod routines;
-pub mod runtime;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod security;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod service;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod skills;
+#[cfg(feature = "agent-runtime")]
 pub mod sop;
+#[cfg(feature = "agent-runtime")]
 pub mod tools;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod trust;
-pub mod tui;
+#[cfg(feature = "agent-runtime")]
 pub(crate) mod tunnel;
-pub(crate) mod util;
+#[cfg(feature = "agent-runtime")]
 pub mod verifiable_intent;
 
 #[cfg(feature = "plugins-wasm")]
@@ -406,9 +431,9 @@ Update one or more fields of an existing scheduled task.
 Only the fields you specify are changed; others remain unchanged.
 
 Examples:
-  zeroclaw cron update <task-id> --expression '0 8 * * *'
-  zeroclaw cron update <task-id> --tz Europe/London --name 'Morning check'
-  zeroclaw cron update <task-id> --command 'Updated message'")]
+  zeroclaw cron update TASK_ID --expression '0 8 * * *'
+  zeroclaw cron update TASK_ID --tz Europe/London --name 'Morning check'
+  zeroclaw cron update TASK_ID --command 'Updated message'")]
     Update {
         /// Task ID
         id: String,

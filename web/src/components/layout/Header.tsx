@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { LogOut, Menu, Settings, ChevronDown } from 'lucide-react';
+import { LogOut, Settings, ChevronDown, PanelLeftClose, PanelLeftOpen, Menu, Globe } from 'lucide-react';
 import { t, SUPPORTED_LOCALES } from '@/lib/i18n';
 import { useLocaleContext } from '@/App';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,9 +21,11 @@ const routeTitles: Record<string, string> = {
 
 interface HeaderProps {
   onMenuToggle: () => void;
+  onCollapseToggle: () => void;
+  collapsed: boolean;
 }
 
-export default function Header({ onMenuToggle }: HeaderProps) {
+export default function Header({ onMenuToggle, onCollapseToggle, collapsed }: HeaderProps) {
   const location = useLocation();
   const { logout } = useAuth();
   const { locale, setAppLocale } = useLocaleContext();
@@ -33,7 +35,6 @@ export default function Header({ onMenuToggle }: HeaderProps) {
 
   const titleKey = routeTitles[location.pathname] ?? 'nav.dashboard';
   const pageTitle = t(titleKey);
-  const currentFlag = SUPPORTED_LOCALES.find((l) => l.code === locale)?.flag ?? '🌐';
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -61,6 +62,19 @@ export default function Header({ onMenuToggle }: HeaderProps) {
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
+          </button>
+
+          {/* Collapse toggle — visible only on desktop */}
+          <button
+            type="button"
+            onClick={onCollapseToggle}
+            className="hidden md:flex p-1.5 -ml-1.5 rounded-lg transition-colors duration-200"
+            style={{ color: 'var(--pc-text-muted)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--pc-text-primary)'; e.currentTarget.style.background = 'var(--pc-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--pc-text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
           {/* Page title */}
@@ -104,7 +118,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                 }
               }}
             >
-              <span>{currentFlag}</span>
+              <Globe className="h-3.5 w-3.5" />
               {locale.toUpperCase()}
               <ChevronDown className="h-3 w-3" style={{ transform: langOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} />
             </button>
@@ -121,7 +135,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                   zIndex: 9999,
                 }}
               >
-                {SUPPORTED_LOCALES.map(({ code, name, flag }) => (
+                {SUPPORTED_LOCALES.map(({ code, name }) => (
                   <button
                     key={code}
                     type="button"
@@ -148,7 +162,6 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                       }
                     }}
                   >
-                    <span style={{ fontSize: '14px' }}>{flag}</span>
                     <span className="flex-1">{name}</span>
                     <span className="font-mono opacity-40">{code.toUpperCase()}</span>
                   </button>

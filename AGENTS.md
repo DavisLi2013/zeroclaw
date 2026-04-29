@@ -26,36 +26,66 @@ Core architecture is trait-driven and modular. Extend by implementing traits and
 
 Key extension points:
 
-- `src/providers/traits.rs` (`Provider`)
-- `src/channels/traits.rs` (`Channel`)
-- `src/tools/traits.rs` (`Tool`)
-- `src/memory/traits.rs` (`Memory`)
-- `src/observability/traits.rs` (`Observer`)
-- `src/runtime/traits.rs` (`RuntimeAdapter`)
-- `src/peripherals/traits.rs` (`Peripheral`) — hardware boards (STM32, RPi GPIO)
+- `crates/zeroclaw-api/src/provider.rs` (`Provider`)
+- `crates/zeroclaw-api/src/channel.rs` (`Channel`)
+- `crates/zeroclaw-api/src/tool.rs` (`Tool`)
+- `crates/zeroclaw-api/src/memory_traits.rs` (`Memory`)
+- `crates/zeroclaw-api/src/observability_traits.rs` (`Observer`)
+- `crates/zeroclaw-api/src/runtime_traits.rs` (`RuntimeAdapter`)
+- `crates/zeroclaw-api/src/peripherals_traits.rs` (`Peripheral`) — hardware boards (STM32, RPi GPIO)
+
+## Stability Tiers
+
+Every workspace crate carries a stability tier per the Microkernel Architecture RFC.
+
+| Crate | Tier | Notes |
+|-------|------|-------|
+| `zeroclaw-api` | Experimental | Stable at v1.0.0 (formal milestone) |
+| `zeroclaw-config` | Beta | Stable at v0.8.0 |
+| `zeroclaw-providers` | Beta | — |
+| `zeroclaw-memory` | Beta | — |
+| `zeroclaw-infra` | Beta | — |
+| `zeroclaw-tool-call-parser` | Beta | Stable at v0.8.0 |
+| `zeroclaw-channels` | Experimental | Plugin migration at v1.0.0 |
+| `zeroclaw-tools` | Experimental | Plugin migration at v1.0.0 |
+| `zeroclaw-runtime` | Experimental | Agent runtime (agent loop, security, cron, SOP, skills, observability) |
+| `zeroclaw-gateway` | Experimental | Separate binary at v0.9.0 |
+| `zeroclaw-tui` | Experimental | TUI onboarding wizard |
+| `zeroclaw-plugins` | Experimental | WASM plugin system — foundation for v1.0.0 plugin ecosystem |
+| `zeroclaw-hardware` | Experimental | USB discovery, peripherals, serial |
+| `zeroclaw-macros` | Beta | Tightly coupled to config schema |
+
+**Tiers**: Stable = covered by breaking-change policy. Beta = breaking changes permitted in MINOR with changelog notes. Experimental = no stability guarantee.
+
+Tiers are promoted, never demoted, through deliberate team decision.
 
 ## Repository Map
 
 - `src/main.rs` — CLI entrypoint and command routing
-- `src/lib.rs` — module exports and shared command enums
-- `src/config/` — schema + config loading/merging
-- `src/agent/` — orchestration loop
-- `src/gateway/` — webhook/gateway server
-- `src/security/` — policy, pairing, secret store
-- `src/memory/` — markdown/sqlite memory backends + embeddings/vector merge
-- `src/providers/` — model providers and resilient wrapper
-- `src/channels/` — Telegram/Discord/Slack/etc channels
-- `src/tools/` — tool execution surface (shell, file, memory, browser)
-- `src/peripherals/` — hardware peripherals (STM32, RPi GPIO)
-- `src/runtime/` — runtime adapters (currently native)
+- `src/lib.rs` — module re-exports and CLI command enum definitions
+- `crates/zeroclaw-api/` — public trait definitions (Provider, Channel, Tool, Memory, Observer, Peripheral)
+- `crates/zeroclaw-config/` — schema, config loading/merging
+- `crates/zeroclaw-macros/` — Configurable derive macro
+- `crates/zeroclaw-providers/` — model providers and resilient wrapper
+- `crates/zeroclaw-channels/` — messaging platform integrations (30+ channels)
+- `crates/zeroclaw-channels/src/orchestrator/` — channel lifecycle, routing, media pipeline
+- `crates/zeroclaw-tools/` — tool execution surface (shell, file, memory, browser)
+- `crates/zeroclaw-runtime/` — agent loop, security, cron, SOP, skills, onboarding wizard, observability
+- `crates/zeroclaw-memory/` — memory backends (markdown, sqlite, embeddings, vector merge)
+- `crates/zeroclaw-infra/` — shared infrastructure (debounce, session, stall watchdog)
+- `crates/zeroclaw-gateway/` — webhook/gateway server (separate binary)
+- `crates/zeroclaw-hardware/` — USB discovery, peripherals, serial, GPIO
+- `crates/zeroclaw-tui/` — TUI onboarding wizard
+- `crates/zeroclaw-plugins/` — WASM plugin system
+- `crates/zeroclaw-tool-call-parser/` — tool call parsing
 - `docs/` — topic-based documentation (setup-guides, reference, ops, security, hardware, contributing, maintainers)
 - `.github/` — CI, templates, automation workflows
 
 ## Risk Tiers
 
 - **Low risk**: docs/chore/tests-only changes
-- **Medium risk**: most `src/**` behavior changes without boundary/security impact
-- **High risk**: `src/security/**`, `src/runtime/**`, `src/gateway/**`, `src/tools/**`, `.github/workflows/**`, access-control boundaries
+- **Medium risk**: most `crates/*/src/**` behavior changes without boundary/security impact
+- **High risk**: `crates/zeroclaw-runtime/src/**` (especially `src/security/`), `crates/zeroclaw-gateway/src/**`, `crates/zeroclaw-tools/src/**`, `.github/workflows/**`, access-control boundaries
 
 When uncertain, classify as higher risk.
 
@@ -72,7 +102,7 @@ Branch/commit/PR rules:
 - Work from a non-`master` branch. Open a PR to `master`; do not push directly.
 - Use conventional commit titles. Prefer small PRs (`size: XS/S/M`).
 - Follow `.github/pull_request_template.md` fully.
-- Never commit secrets, personal data, or real identity information (see `@docs/contributing/pr-discipline.md`).
+- Never commit secrets, personal data, or real identity information (see `@docs/book/src/contributing/privacy.md`).
 
 ## Anti-Patterns
 
@@ -85,8 +115,33 @@ Branch/commit/PR rules:
 - Do not hide behavior-changing side effects in refactor commits.
 - Do not include personal identity or sensitive information in test data, examples, docs, or commits.
 
+## Skills
+
+AI coding assistant skills live in `.claude/skills/`. Use the right one for the job:
+
+- `.claude/skills/github-pr-review-session/SKILL.md` — PR review co-pilot; assists **you** as the human reviewer. Posts reviews as WareWolf-MoonWall using the RFC feedback taxonomy (🔴/🟡/✅/🔵/🟢). Trigger: `review 1234`, `re-review 1234`, `go through the queue`.
+- `.claude/skills/changelog-generation/SKILL.md` — generates `CHANGELOG-next.md` between stable tags, resolves contributors via GraphQL, feeds the release workflow. Trigger: `generate changelog`, `release notes for v0.7.x`.
+
+## Localization
+
+- All user-facing output (CLI messages, tool descriptions, onboarding prompts) must use `fl!()` / Fluent strings — never bare string literals.
+- Log messages, `tracing::` spans/events, and panic messages stay in English with stable `error_key` fields (RFC #5653 §4.6).
+- Panics and `tracing::` lines are never translated.
+- The Wiki and internal developer docs are English only.
+
+Dev-operational contracts — files consumed by AI coding skills and development tooling. Do not move or delete without updating all consuming skills and AGENTS.md:
+
+| Protected file | Consuming skill / tool |
+|---|---|
+| `docs/book/src/contributing/pr-review-protocol.md` | `github-pr-review-session` — review protocol |
+| `docs/book/src/maintainers/changelog-generation.md` | `changelog-generation` — release procedure |
+| `docs/book/src/maintainers/reviewer-playbook.md` | `github-issue-triage` — triage governance |
+| `docs/book/src/maintainers/pr-workflow.md` | `github-issue-triage` — triage discipline |
+| `docs/book/src/contributing/privacy.md` | `github-issue-triage`, PR template — privacy rules |
+| `docs/book/src/foundations/fnd-00*.md` | `github-pr-review-session` — RFC reference data; public transparency documents |
+
 ## Linked References
 
-- `@docs/contributing/change-playbooks.md` — adding providers, channels, tools, peripherals; security/gateway changes; architecture boundaries
-- `@docs/contributing/pr-discipline.md` — privacy rules, superseded-PR attribution/templates, handoff template
-- `@docs/contributing/docs-contract.md` — docs system contract, i18n rules, locale parity
+- `@docs/book/src/developing/extension-examples.md` — adding providers, channels, tools, peripherals; tool shared-state contract; architecture boundary rules
+- `@docs/book/src/contributing/privacy.md` — privacy rules and neutral-placeholder palette
+- `@docs/book/src/maintainers/superseding.md` — superseded-PR attribution, PR/commit templates, handoff template
