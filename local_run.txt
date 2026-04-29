@@ -5,3 +5,32 @@ $env:ZEROCLAW_API_KEY = "sk-9mYjfdrGia3EOoMGu2i6iEpNphM0gxcVhjSmcKZtXGgxYkWm"
 powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root D:\workspace\axi-research\zeroclaw -m "帮我总结这个项目"
 
 powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root D:\workspace\axi-research\zeroclaw 
+
+
+------------------------------
+
+
+
+最好能形成一个统一对外的协议，外部应用可以通过此协议调用zeroclaw. 此协议可以是 http/https 形式的api协议 ，也可以是websocket或grpc，你根据现有情况给出三个方案供我选择。
+  请一步一步思考后实现上面的目标。
+
+
+根据 axi_agent_orchestrator_for_AI系统需求草案-增强版PRD.md 形成迭代改造方案，方案需要分成具体的计划步骤。 但不要改写任何现有代码。
+注1： 计划的每个步骤完成后都可以继续编译运行
+注2:   最好能形成一个统一对外的协议，外部应用可以通过此协议调用zeroclaw. 此协议可以是 http/https 形式的api协议 ，也可以是websocket或grpc，你根据现有情况给出三个方案供我选择。
+  请一步一步思考后实现上面的目标。
+
+
+
+这个文档里有几个候选的统一对外的协议，外部应用可以通过此协议调用zeroclaw. 此协议可以是 http/https 形式的api协议 ，也可以是websocket或grpc。
+你看下是否有更好的协议。
+
+此协议用于服务器与服务器间调用。
+
+百万级别的C端用户--------->请求到达服务器1 --------> 需要利用你设计的协议 ---------> 到达服务器2，服务器2上部署有zeroclaw.exe，用于处理具体的请求并给出回应。
+分析上面的方案及你可以重新给出的新方案的各种优点缺点。
+  请一步一步思考后实现上面的目标 并更新相关md文档，请不要修改代码。
+
+
+这里面的web是通过什么样的协议调用hermes-agent，并与之交互的，请给出详细的协议文档，并生成相关md文件。
+请一步一步思考后实现上面的目标。
