@@ -4162,6 +4162,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-timeout"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
+dependencies = [
+ "hyper",
+ "hyper-util",
+ "pin-project-lite",
+ "tokio",
+ "tower-service",
+]
+
+[[package]]
 name = "hyper-util"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10450,15 +10463,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fec7c61a0695dc1887c1b53952990f3ad2e3a31453e1f49f10e75424943a93ec"
 dependencies = [
  "async-trait",
+ "axum",
  "base64 0.22.1",
  "bytes",
+ "h2",
  "http 1.4.0",
  "http-body",
  "http-body-util",
+ "hyper",
+ "hyper-timeout",
+ "hyper-util",
  "percent-encoding",
  "pin-project",
+ "socket2",
  "sync_wrapper",
+ "tokio",
  "tokio-stream",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -10483,11 +10504,15 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
+ "indexmap 2.13.0",
  "pin-project-lite",
+ "slab",
  "sync_wrapper",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -13344,16 +13369,21 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "bytes",
  "chrono",
  "directories",
  "futures-util",
  "hex",
  "hmac 0.12.1",
+ "http 1.4.0",
+ "http-body",
  "http-body-util",
  "hyper",
  "hyper-util",
  "mime_guess",
  "parking_lot",
+ "prost 0.14.3",
+ "prost-types",
  "rand 0.10.1",
  "rcgen",
  "rusqlite",
@@ -13368,8 +13398,11 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml 1.1.2+spec-1.1.0",
+ "tonic",
+ "tonic-prost",
  "tower",
  "tower-http",
+ "tower-service",
  "tracing",
  "uuid",
  "zeroclaw-api",

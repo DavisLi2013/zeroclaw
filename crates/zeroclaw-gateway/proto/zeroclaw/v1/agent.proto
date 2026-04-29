@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package zeroclaw.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service AgentService {
+  rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
+  rpc StreamRun(StreamRunRequest) returns (stream RunEvent);
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+}
+
+message Actor {
+  string actor_id = 1;
+  string actor_type = 2;
+  string display_name = 3;
+  map<string, string> metadata = 10;
+}
+
+message RunInput {
+  enum InputKind {
+    INPUT_KIND_UNSPECIFIED = 0;
+    INPUT_KIND_MESSAGE = 1;
+  }
+
+  InputKind kind = 1;
+  string text = 2;
+}
+
+message RunOptions {
+  bool stream = 1;
+  string model = 2;
+  repeated string allowed_tools = 3;
+  uint64 timeout_ms = 4;
+}
+
+message CreateRunRequest {
+  string protocol = 1;
+  string request_id = 2;
+  string session_id = 3;
+  Actor actor = 4;
+  RunInput input = 5;
+  RunOptions options = 6;
+  map<string, string> metadata = 10;
+}
+
+message CreateRunResponse {
+  string run_id = 1;
+  string request_id = 2;
+  string session_id = 3;
+  RunStatus status = 4;
+  bool duplicate = 5;
+}
+
+message StreamRunRequest {
+  string run_id = 1;
+  uint64 after_sequence = 2;
+}
+
+message CancelRunRequest {
+  string run_id = 1;
+  string reason = 2;
+}
+
+message CancelRunResponse {
+  string run_id = 1;
+  bool accepted = 2;
+  RunStatus status = 3;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message GetRunResponse {
+  string run_id = 1;
+  string request_id = 2;
+  string session_id = 3;
+  RunStatus status = 4;
+  uint64 last_sequence = 5;
+  string final_text = 6;
+  RunError error = 7;
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_ACCEPTED = 1;
+  RUN_STATUS_RUNNING = 2;
+  RUN_STATUS_COMPLETED = 3;
+  RUN_STATUS_CANCELLED = 4;
+  RUN_STATUS_FAILED = 5;
+}
+
+message RunEvent {
+  string run_id = 1;
+  string request_id = 2;
+  string session_id = 3;
+  uint64 sequence = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  string event_type = 6;
+
+  oneof payload {
+    RunAccepted accepted = 10;
+    RunStarted started = 11;
+    MessageDelta message_delta = 12;
+    ThinkingDelta thinking_delta = 13;
+    ToolCall tool_call = 14;
+    ToolResult tool_result = 15;
+    RunCompleted completed = 16;
+    RunCancelled cancelled = 17;
+    RunFailed failed = 18;
+  }
+}
+
+message RunAccepted {
+  uint32 queue_depth = 1;
+}
+
+message RunStarted {
+  string provider = 1;
+  string model = 2;
+}
+
+message MessageDelta {
+  string delta = 1;
+}
+
+message ThinkingDelta {
+  string delta = 1;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  string arguments_json = 3;
+}
+
+message ToolResult {
+  string id = 1;
+  string name = 2;
+  string output = 3;
+}
+
+message RunCompleted {
+  string final_text = 1;
+}
+
+message RunCancelled {
+  string reason = 1;
+}
+
+message RunFailed {
+  RunError error = 1;
+}
+
+message RunError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  map<string, string> details = 10;
+}

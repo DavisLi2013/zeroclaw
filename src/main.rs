@@ -341,6 +341,32 @@ Examples:
         gateway_command: Option<zeroclaw::GatewayCommands>,
     },
 
+    /// Start the gRPC Server-to-Server API
+    #[command(long_about = "\
+Start the gRPC Server-to-Server API.
+
+Launches a typed internal API for Server 1 to invoke agent runs on \
+this ZeroClaw process. The bind address defaults to gateway.host and \
+gateway.port + 1.
+
+Examples:
+  zeroclaw grpc --project-root /path/to/project
+  zeroclaw grpc --project-root /path/to/project --port 42618
+  zeroclaw grpc --project-root /path/to/project --host 127.0.0.1")]
+    Grpc {
+        /// Project root for this gRPC server. All workspace-scoped runtime state is bound to this directory.
+        #[arg(long, value_name = "PATH", required = true)]
+        project_root: PathBuf,
+
+        /// Port to listen on; defaults to config gateway.port + 1
+        #[arg(short, long)]
+        port: Option<u16>,
+
+        /// Host to bind to; defaults to config gateway.host
+        #[arg(long)]
+        host: Option<String>,
+    },
+
     /// Start ACP (Agent Control Protocol) server over stdio
     #[command(long_about = "\
 Start the ACP server (JSON-RPC 2.0 over stdio).
@@ -1590,6 +1616,17 @@ async fn main() -> Result<()> {
             }
         }
 
+        Commands::Grpc {
+            project_root,
+            port,
+            host,
+        } => {
+            apply_runtime_project_root(&mut config, &project_root)?;
+            let (port, host) = resolve_grpc_addr(&config, port, host);
+            log_grpc_start(&host, port);
+            Box::pin(run_grpc_if_enabled(&host, port, config)).await
+        }
+
         Commands::Daemon {
             project_root,
             port,
@@ -2663,12 +2700,29 @@ fn resolve_gateway_addr(config: &Config, port: Option<u16>, host: Option<String>
     (port, host)
 }
 
+/// Resolve gRPC host and port from CLI args or config.
+fn resolve_grpc_addr(config: &Config, port: Option<u16>, host: Option<String>) -> (u16, String) {
+    let default_port = config.gateway.port.checked_add(1).unwrap_or(42618);
+    let port = port.unwrap_or(default_port);
+    let host = host.unwrap_or_else(|| config.gateway.host.clone());
+    (port, host)
+}
+
 /// Log gateway startup message.
 fn log_gateway_start(host: &str, port: u16) {
     if port == 0 {
         info!("🚀 Starting ZeroClaw Gateway on {host} (random port)");
     } else {
         info!("🚀 Starting ZeroClaw Gateway on {host}:{port}");
+    }
+}
+
+/// Log gRPC startup message.
+fn log_grpc_start(host: &str, port: u16) {
+    if port == 0 {
+        info!("Starting ZeroClaw gRPC on {host} (random port)");
+    } else {
+        info!("Starting ZeroClaw gRPC on {host}:{port}");
     }
 }
 
@@ -3453,6 +3507,25 @@ async fn run_gateway_if_enabled(
     anyhow::bail!("Gateway feature is not enabled. Rebuild with --features gateway")
 }
 
+#[cfg(feature = "gateway")]
+async fn run_grpc_if_enabled(
+    host: &str,
+    port: u16,
+    config: zeroclaw::config::Config,
+) -> anyhow::Result<()> {
+    Box::pin(zeroclaw_gateway::grpc::run_grpc_server(host, port, config)).await
+}
+
+#[cfg(not(feature = "gateway"))]
+#[allow(clippy::unused_async)]
+async fn run_grpc_if_enabled(
+    _host: &str,
+    _port: u16,
+    _config: zeroclaw::config::Config,
+) -> anyhow::Result<()> {
+    anyhow::bail!("Gateway feature is not enabled. Rebuild with --features gateway")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3844,6 +3917,35 @@ mod tests {
         match cli.command {
             Commands::Daemon { .. } => {}
             other => panic!("expected daemon command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "agent-runtime")]
+    fn grpc_command_parses_project_root_host_and_port() {
+        let cli = Cli::try_parse_from([
+            "zeroclaw",
+            "grpc",
+            "--project-root",
+            "project-grpc",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "42618",
+        ])
+        .expect("grpc command with project root should parse");
+
+        match cli.command {
+            Commands::Grpc {
+                project_root,
+                host,
+                port,
+            } => {
+                assert_eq!(project_root, PathBuf::from("project-grpc"));
+                assert_eq!(host.as_deref(), Some("127.0.0.1"));
+                assert_eq!(port, Some(42618));
+            }
+            other => panic!("expected grpc command, got {other:?}"),
         }
     }
 

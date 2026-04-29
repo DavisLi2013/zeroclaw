@@ -15,6 +15,7 @@ pub mod api_plugins;
 pub mod api_webauthn;
 pub mod auth_rate_limit;
 pub mod canvas;
+pub mod grpc;
 pub mod hardware_context;
 pub mod node_tool;
 pub mod nodes;
