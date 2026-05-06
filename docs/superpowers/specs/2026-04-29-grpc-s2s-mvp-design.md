@@ -161,8 +161,8 @@ does not add service-identity policy beyond the bearer-token check.
 - The command accepts `--host` and `--port` overrides.
 - Binding to a public address follows the existing gateway public-bind warning
   policy.
-- Request body protection relies on protobuf message size limits added in tonic
-  server configuration.
+- Request body protection relies on a 1 MiB protobuf decoding limit configured
+  on the tonic service wrapper.
 
 ## File Layout
 
@@ -171,9 +171,11 @@ Planned files:
 - `crates/zeroclaw-gateway/proto/zeroclaw/v1/agent.proto`:
   protobuf contract.
 - `crates/zeroclaw-gateway/build.rs`:
-  tonic/prost code generation.
+  unchanged; the MVP keeps the existing dashboard build script.
 - `crates/zeroclaw-gateway/src/grpc.rs`:
-  gRPC service implementation and run registry.
+  gRPC service implementation, manually maintained prost-compatible protobuf
+  types, tonic service wrapper, and run registry. The `.proto` file remains the
+  client-facing contract; normal builds do not require `protoc`.
 - `crates/zeroclaw-gateway/src/lib.rs`:
   exports `grpc` module when enabled.
 - `crates/zeroclaw-gateway/Cargo.toml`:

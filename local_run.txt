@@ -52,3 +52,14 @@ powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root
 示例请写入到之前的md文档中。
 请一步一步思考后实现上面的目标。
 
+
+
+
+百万级别的C端用户--------->请求到达服务器1 --------> 需要利用你设计的协议X ---------> 到达服务器2，服务器2上部署有zeroclaw.exe，用于处理具体的请求并给出回应。
+目前已初步选定协议X为 grpc，并且你已经写了相关文档。
+参考文档 2026-04-29-grpc-s2s-mvp-design.md 。
+
+你先检查上面的文档是否有遗漏，并且之后检查代码是否实现了此grpc.
+
+  请一步一步思考后实现上面的目标 。
+

@@ -27,6 +27,7 @@ use zeroclaw_runtime::security::pairing::{PairingGuard, is_public_bind};
 const PROTOCOL_VERSION: &str = "zeroclaw.v1";
 const EVENT_RETAIN_LIMIT: usize = 1024;
 const EVENT_CHANNEL_CAPACITY: usize = 256;
+pub const GRPC_MAX_DECODING_MESSAGE_SIZE: usize = 1024 * 1024;
 
 /// Manually maintained prost/tonic equivalent of `proto/zeroclaw/v1/agent.proto`.
 ///
@@ -323,13 +324,20 @@ pub mod pb {
     #[derive(Debug)]
     pub struct AgentServiceServer<T> {
         inner: Arc<T>,
+        max_decoding_message_size: Option<usize>,
     }
 
     impl<T> AgentServiceServer<T> {
         pub fn new(inner: T) -> Self {
             Self {
                 inner: Arc::new(inner),
+                max_decoding_message_size: None,
             }
+        }
+
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.max_decoding_message_size = Some(limit);
+            self
         }
     }
 
@@ -337,6 +345,7 @@ pub mod pb {
         fn clone(&self) -> Self {
             Self {
                 inner: Arc::clone(&self.inner),
+                max_decoding_message_size: self.max_decoding_message_size,
             }
         }
     }
@@ -357,6 +366,7 @@ pub mod pb {
 
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = Arc::clone(&self.inner);
+            let max_decoding_message_size = self.max_decoding_message_size;
             match req.uri().path() {
                 "/zeroclaw.v1.AgentService/CreateRun" => {
                     struct CreateRunSvc<T: AgentService>(Arc<T>);
@@ -373,6 +383,9 @@ pub mod pb {
                         let method = CreateRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = Grpc::new(codec);
+                        if let Some(limit) = max_decoding_message_size {
+                            grpc = grpc.max_decoding_message_size(limit);
+                        }
                         Ok(grpc.unary(method, req).await)
                     })
                 }
@@ -392,6 +405,9 @@ pub mod pb {
                         let method = StreamRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = Grpc::new(codec);
+                        if let Some(limit) = max_decoding_message_size {
+                            grpc = grpc.max_decoding_message_size(limit);
+                        }
                         Ok(grpc.server_streaming(method, req).await)
                     })
                 }
@@ -410,6 +426,9 @@ pub mod pb {
                         let method = CancelRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = Grpc::new(codec);
+                        if let Some(limit) = max_decoding_message_size {
+                            grpc = grpc.max_decoding_message_size(limit);
+                        }
                         Ok(grpc.unary(method, req).await)
                     })
                 }
@@ -428,6 +447,9 @@ pub mod pb {
                         let method = GetRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = Grpc::new(codec);
+                        if let Some(limit) = max_decoding_message_size {
+                            grpc = grpc.max_decoding_message_size(limit);
+                        }
                         Ok(grpc.unary(method, req).await)
                     })
                 }
@@ -674,7 +696,10 @@ pub async fn run_grpc_server(host: &str, port: u16, config: Config) -> Result<()
 
     tracing::info!("ZeroClaw gRPC listening on {addr}");
     Server::builder()
-        .add_service(pb::AgentServiceServer::new(service))
+        .add_service(
+            pb::AgentServiceServer::new(service)
+                .max_decoding_message_size(GRPC_MAX_DECODING_MESSAGE_SIZE),
+        )
         .serve(addr)
         .await
         .context("gRPC server failed")
@@ -1217,5 +1242,14 @@ mod tests {
             event.payload,
             Some(pb::run_event::Payload::ToolCall(_))
         ));
+    }
+
+    #[test]
+    fn agent_service_server_accepts_decoding_message_limit() {
+        let mut config = Config::default();
+        config.gateway.session_persistence = false;
+        let service = GrpcAgentService::new(config).unwrap();
+        let _server = pb::AgentServiceServer::new(service)
+            .max_decoding_message_size(GRPC_MAX_DECODING_MESSAGE_SIZE);
     }
 }
