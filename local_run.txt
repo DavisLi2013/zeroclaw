@@ -9,6 +9,15 @@ powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root
 
 ------------------------------
 
+# 先启动 core 服务
+./target/release/zeroclaw-core.exe --project-root D:\workspace\axi-research\zeroclaw 
+
+# 再启动 edge 服务
+./target/release/zeroclaw-edge.exe --project-root D:\workspace\axi-research\zeroclaw  --core-grpc http://127.0.0.1:42618
+
+
+
+------------------------------
 
 
 最好能形成一个统一对外的协议，外部应用可以通过此协议调用zeroclaw. 此协议可以是 http/https 形式的api协议 ，也可以是websocket或grpc，你根据现有情况给出三个方案供我选择。
