@@ -78,3 +78,56 @@ powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root
 请重新按上面的要求给出可行性及计划，待我确认后才真正开始调整代码
   请一步一步思考后实现上面的目标 。
 
+zeroclaw-edge.exe 里不能直接调用相关agent，而是要通过grpc通信到达zeroclaw-core.exe后，由zeroclaw-core.exe调用对应agent，并把相应的response通过grpc返回给zeroclaw-edge.exe，zeroclaw-edge.exe再返回给前端渠道。
+ zeroclaw-edge.exe、zeroclaw-core.exe需要各自处理不同的事情及逻辑，要区分清楚。
+请按上面的要求给出可行性及计划，待我确认后才真正开始调整代码
+  请一步一步思考后实现上面的目标 。
+
+
+
+
+请按仓库里的设计和计划文档实现 edge/core gRPC 拆分：
+
+  - 设计文档：docs/superpowers/specs/2026-05-06-edge-core-grpc-split-design.md
+  - 实施计划：docs/superpowers/plans/2026-05-06-edge-core-grpc-split.md
+
+  目标：
+
+  1. 新增 zeroclaw-edge.exe 和 zeroclaw-core.exe。
+  2. zeroclaw-edge.exe 承载 WebUI、REST chat、WebSocket、webhook/channel、auth/rate-limit 等入口。
+  3. zeroclaw-core.exe 只启动 gRPC AgentService，只负责调用 agent/runtime/provider/tools。
+  4. zeroclaw-edge.exe 生产路径绝对不能直接调用 agent/runtime，只能通过 gRPC 调 zeroclaw-core.exe。
+  5. WebUI 只能连接 zeroclaw-edge.exe，不能连接 zeroclaw-core.exe。
+  6. 所有 agent 执行请求必须是：
+     WebUI/REST/WS/webhook/channel -> zeroclaw-edge.exe -> gRPC -> zeroclaw-core.exe -> agent -> gRPC response/events -> zeroclaw-edge.exe -> 前端/渠道。
+
+  请严格按计划文档执行，使用 TDD：
+  - 先写失败测试
+  - 确认失败
+  - 再实现最小代码
+  - 再跑测试确认通过
+
+  特别注意强边界：
+  zeroclaw-edge.exe 生产路径禁止直接引用或调用：
+  - zeroclaw_runtime::agent::Agent
+  - Agent::from_config
+  - Agent::from_config_with_session_cwd
+  - Agent::turn_streamed
+  - zeroclaw_runtime::agent::process_message
+
+  请先阅读 AGENTS.md、设计文档、实施计划和相关代码，然后从计划的 Task 1 开始逐步执行。每完成一个任务，运行对应测试并更新计划复选框。不要改 unrelated 文件，不要回退已有用户修改。
+
+  完成后至少运行：
+  cargo fmt --all -- --check
+  cargo test -p zeroclaw-config gateway_core_config_defaults_to_no_endpoint
+  cargo test -p zeroclaw-gateway core_client
+  cargo test -p zeroclaw-gateway core_client_grpc
+  cargo test -p zeroclaw-gateway grpc
+  cargo test -p zeroclaw-gateway edge_sources_do_not_call_agent_runtime_directly
+  cargo check --bin zeroclaw-core
+  cargo check --bin zeroclaw-edge
+  cargo clippy -p zeroclaw-gateway --all-targets -- -D warnings
+
+  建议新会话第一句话就用这段，避免模型误把 edge 做成本地 fallback。
+请一步一步思考后实现上面的目标。
+

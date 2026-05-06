@@ -1261,9 +1261,34 @@ mod tests {
         }
     }
 
+    struct MockCoreAgentClient;
+
+    #[async_trait]
+    impl crate::core_client::CoreAgentClient for MockCoreAgentClient {
+        async fn run_chat_streamed(
+            &self,
+            _request: crate::core_client::CoreRunRequest,
+        ) -> anyhow::Result<crate::core_client::CoreRunStream> {
+            let stream =
+                tokio_stream::iter(vec![Ok(crate::core_client::CoreRunEvent::Completed {
+                    final_text: "ok".to_string(),
+                })]);
+            Ok(Box::pin(stream))
+        }
+
+        async fn cancel_run(
+            &self,
+            _run_id: &str,
+            _reason: &str,
+        ) -> anyhow::Result<crate::core_client::CoreCancelResult> {
+            Ok(crate::core_client::CoreCancelResult { accepted: true })
+        }
+    }
+
     fn test_state(config: zeroclaw_config::schema::Config) -> AppState {
         AppState {
             config: Arc::new(Mutex::new(config)),
+            core_client: Arc::new(MockCoreAgentClient),
             provider: Arc::new(MockProvider),
             model: "test-model".into(),
             temperature: 0.0,

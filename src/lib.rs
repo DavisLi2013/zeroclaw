@@ -111,6 +111,24 @@ pub mod plugins;
 
 pub use config::Config;
 
+#[cfg(feature = "agent-runtime")]
+pub fn init_cli_tracing() {
+    use tracing_subscriber::{EnvFilter, fmt};
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = fmt().with_env_filter(filter).try_init();
+}
+
+#[cfg(feature = "agent-runtime")]
+pub fn apply_runtime_project_root(
+    config: &mut Config,
+    project_root: &std::path::Path,
+) -> anyhow::Result<()> {
+    crate::config::project_root::apply_project_root(config, project_root)?;
+    observability::runtime_trace::init_from_config(&config.observability, &config.workspace_dir);
+    Ok(())
+}
+
 /// Gateway management subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GatewayCommands {

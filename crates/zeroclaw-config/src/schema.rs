@@ -2266,6 +2266,28 @@ impl Default for PeripheralBoardConfig {
 
 // ── Gateway security ─────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize, Deserialize, Configurable)]
+#[cfg_attr(feature = "schema-export", derive(schemars::JsonSchema))]
+#[serde(default)]
+#[prefix = "gateway.core"]
+pub struct GatewayCoreConfig {
+    pub endpoint: Option<String>,
+    #[secret]
+    #[cfg_attr(feature = "schema-export", schemars(extend("x-secret" = true)))]
+    pub bearer_token: Option<String>,
+    pub timeout_ms: u64,
+}
+
+impl Default for GatewayCoreConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: None,
+            bearer_token: None,
+            timeout_ms: 600_000,
+        }
+    }
+}
+
 /// Gateway server configuration (`[gateway]` section).
 ///
 /// Controls the HTTP gateway for webhook and pairing endpoints.
@@ -2348,6 +2370,11 @@ pub struct GatewayConfig {
     #[serde(default)]
     #[nested]
     pub tls: Option<GatewayTlsConfig>,
+
+    /// Core gRPC backend used by split edge deployments (`[gateway.core]`).
+    #[serde(default)]
+    #[nested]
+    pub core: GatewayCoreConfig,
 }
 
 fn default_gateway_port() -> u16 {
@@ -2406,6 +2433,7 @@ impl Default for GatewayConfig {
             pairing_dashboard: PairingDashboardConfig::default(),
             web_dist_dir: None,
             tls: None,
+            core: GatewayCoreConfig::default(),
         }
     }
 }
@@ -14027,6 +14055,13 @@ bot_token = "xoxb-tok"
     }
 
     #[test]
+    async fn gateway_core_config_defaults_to_no_endpoint() {
+        let config = Config::default();
+        assert!(config.gateway.core.endpoint.is_none());
+        assert_eq!(config.gateway.core.timeout_ms, 600_000);
+    }
+
+    #[test]
     async fn checklist_gateway_cli_default_host_is_localhost() {
         // The CLI default for --host is 127.0.0.1 (checked in main.rs)
         // Here we verify the config default matches
@@ -14061,6 +14096,7 @@ bot_token = "xoxb-tok"
             pairing_dashboard: PairingDashboardConfig::default(),
             web_dist_dir: None,
             tls: None,
+            core: GatewayCoreConfig::default(),
         };
         let toml_str = toml::to_string(&g).unwrap();
         let parsed: GatewayConfig = toml::from_str(&toml_str).unwrap();

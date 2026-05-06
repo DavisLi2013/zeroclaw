@@ -62,7 +62,7 @@ provider/tool/runtime execution
 - Modify: `crates/zeroclaw-gateway/src/lib.rs`
 - Test: `crates/zeroclaw-gateway/src/core_client.rs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this test in `core_client.rs`:
 
@@ -86,7 +86,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -96,7 +96,7 @@ cargo test -p zeroclaw-gateway core_client::tests::run_event_delta_accumulates_f
 
 Expected: fail because `core_client` module and types do not exist.
 
-- [ ] **Step 3: Add minimal core client types**
+- [x] **Step 3: Add minimal core client types**
 
 Create `crates/zeroclaw-gateway/src/core_client.rs`:
 
@@ -165,7 +165,7 @@ Modify `crates/zeroclaw-gateway/src/lib.rs`:
 pub mod core_client;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 
@@ -182,7 +182,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-gateway/src/lib.rs`
 - Test: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
 
-- [ ] **Step 1: Write the failing mapping test**
+- [x] **Step 1: Write the failing mapping test**
 
 Add:
 
@@ -217,7 +217,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -227,7 +227,7 @@ cargo test -p zeroclaw-gateway core_client_grpc::tests::maps_message_delta_event
 
 Expected: fail because `core_client_grpc` does not exist.
 
-- [ ] **Step 3: Implement mapping**
+- [x] **Step 3: Implement mapping**
 
 Create `crates/zeroclaw-gateway/src/core_client_grpc.rs` with:
 
@@ -290,7 +290,7 @@ Modify `lib.rs`:
 pub mod core_client_grpc;
 ```
 
-- [ ] **Step 4: Run the mapping test**
+- [x] **Step 4: Run the mapping test**
 
 Run:
 
@@ -306,7 +306,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-config/src/schema.rs`
 - Test: config schema tests in `schema.rs`
 
-- [ ] **Step 1: Write failing config default test**
+- [x] **Step 1: Write failing config default test**
 
 Add a test near gateway config tests:
 
@@ -319,7 +319,7 @@ fn gateway_core_config_defaults_to_no_endpoint() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -329,7 +329,7 @@ cargo test -p zeroclaw-config gateway_core_config_defaults_to_no_endpoint
 
 Expected: fail because `gateway.core` does not exist.
 
-- [ ] **Step 3: Add config fields**
+- [x] **Step 3: Add config fields**
 
 Add:
 
@@ -359,7 +359,7 @@ Add this field to `GatewayConfig`:
 pub core: GatewayCoreConfig,
 ```
 
-- [ ] **Step 4: Run config tests**
+- [x] **Step 4: Run config tests**
 
 Run:
 
@@ -375,7 +375,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-gateway/src/lib.rs`
 - Test: existing `AppState` clone/test-state tests
 
-- [ ] **Step 1: Write failing AppState client test**
+- [x] **Step 1: Write failing AppState client test**
 
 Add:
 
@@ -387,7 +387,7 @@ fn app_state_contains_core_agent_client() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -397,7 +397,7 @@ cargo test -p zeroclaw-gateway app_state_contains_core_agent_client
 
 Expected: fail because `AppState` has no core client field.
 
-- [ ] **Step 3: Add core client field and construction helper**
+- [x] **Step 3: Add core client field and construction helper**
 
 Add to `AppState`:
 
@@ -433,7 +433,7 @@ let core_client = build_core_client(&config)?;
 
 and include it in `AppState`.
 
-- [ ] **Step 4: Update test AppState builders**
+- [x] **Step 4: Update test AppState builders**
 
 Every test creating `AppState` must pass a mock that implements `CoreAgentClient`.
 
@@ -471,7 +471,7 @@ Then set:
 core_client: Arc::new(MockCoreAgentClient::default()),
 ```
 
-- [ ] **Step 5: Run gateway test**
+- [x] **Step 5: Run gateway test**
 
 Run:
 
@@ -487,7 +487,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-gateway/src/lib.rs`
 - Test: gateway webhook tests
 
-- [ ] **Step 1: Write failing behavior test**
+- [x] **Step 1: Write failing behavior test**
 
 Add a test client that records calls and install it in a test `AppState`. Test `handle_webhook` with a message and assert the client saw that input.
 
@@ -497,7 +497,7 @@ Expected test assertion:
 assert_eq!(client.calls.lock().unwrap().as_slice(), &["hello from webhook"]);
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -507,7 +507,7 @@ cargo test -p zeroclaw-gateway webhook_uses_core_agent_client
 
 Expected: fail because `run_gateway_chat_with_tools` still calls provider/runtime directly.
 
-- [ ] **Step 3: Change `run_gateway_chat_with_tools`**
+- [x] **Step 3: Change `run_gateway_chat_with_tools`**
 
 Replace local provider/runtime dispatch with:
 
@@ -527,7 +527,7 @@ while let Some(event) = stream.next().await {
 Ok(collected.final_text)
 ```
 
-- [ ] **Step 4: Run webhook tests**
+- [x] **Step 4: Run webhook tests**
 
 Run:
 
@@ -543,7 +543,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-gateway/src/ws.rs`
 - Test: WebSocket unit tests or focused mapping tests
 
-- [ ] **Step 1: Write failing WebSocket event mapping test**
+- [x] **Step 1: Write failing WebSocket event mapping test**
 
 Add a pure function:
 
@@ -567,7 +567,7 @@ fn ws_message_from_core_event_maps_delta() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -577,7 +577,7 @@ cargo test -p zeroclaw-gateway ws_message_from_core_event_maps_delta
 
 Expected: fail because the function does not exist.
 
-- [ ] **Step 3: Implement mapping function**
+- [x] **Step 3: Implement mapping function**
 
 Add:
 
@@ -605,7 +605,7 @@ fn ws_message_from_core_event(event: CoreRunEvent) -> Option<serde_json::Value> 
 }
 ```
 
-- [ ] **Step 4: Replace direct local agent path**
+- [x] **Step 4: Replace direct local agent path**
 
 Remove WebSocket production calls to:
 
@@ -618,7 +618,7 @@ For each user message, build `CoreRunRequest`, call
 `state.core_client.run_chat_streamed`, forward mapped events to the socket, and
 update session persistence with accumulated final text.
 
-- [ ] **Step 5: Run WebSocket mapping test**
+- [x] **Step 5: Run WebSocket mapping test**
 
 Run:
 
@@ -634,7 +634,7 @@ Expected: pass.
 - Modify: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
 - Test: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
 
-- [ ] **Step 1: Write failing request conversion test**
+- [x] **Step 1: Write failing request conversion test**
 
 Add:
 
@@ -655,7 +655,7 @@ fn builds_create_run_request_from_core_request() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -665,7 +665,7 @@ cargo test -p zeroclaw-gateway builds_create_run_request_from_core_request
 
 Expected: fail because `build_create_run_request` does not exist.
 
-- [ ] **Step 3: Implement conversion**
+- [x] **Step 3: Implement conversion**
 
 Add:
 
@@ -696,7 +696,7 @@ pub fn build_create_run_request(request: CoreRunRequest) -> pb::CreateRunRequest
 }
 ```
 
-- [ ] **Step 4: Implement actual gRPC client**
+- [x] **Step 4: Implement actual gRPC client**
 
 Add a tonic client wrapper for the manually maintained service paths. Use
 `tonic::client::Grpc` with path strings:
@@ -713,7 +713,7 @@ Attach metadata:
 authorization: Bearer <gateway.core.bearer_token>
 ```
 
-- [ ] **Step 5: Run gRPC client tests**
+- [x] **Step 5: Run gRPC client tests**
 
 Run:
 
@@ -729,7 +729,7 @@ Expected: pass.
 - Test: `crates/zeroclaw-gateway/src/ws.rs`
 - Test: `crates/zeroclaw-gateway/src/lib.rs`
 
-- [ ] **Step 1: Add scan-based boundary test**
+- [x] **Step 1: Add scan-based boundary test**
 
 Add a test that reads edge source files and rejects forbidden agent calls:
 
@@ -759,7 +759,7 @@ fn edge_sources_do_not_call_agent_runtime_directly() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails before migration**
+- [x] **Step 2: Run the test to verify it fails before migration**
 
 Run:
 
@@ -769,7 +769,7 @@ cargo test -p zeroclaw-gateway edge_sources_do_not_call_agent_runtime_directly
 
 Expected: fail until WebSocket and REST/webhook/channel paths are migrated.
 
-- [ ] **Step 3: Re-run after Tasks 5 and 6**
+- [x] **Step 3: Re-run after Tasks 5 and 6**
 
 Run:
 
@@ -786,7 +786,7 @@ Expected: pass after direct calls are removed.
 - Create: `src/bin/zeroclaw-core.rs`
 - Test: compile check
 
-- [ ] **Step 1: Run failing binary check**
+- [x] **Step 1: Run failing binary check**
 
 Run:
 
@@ -796,7 +796,7 @@ cargo check --bin zeroclaw-core
 
 Expected: fail because `zeroclaw-core` does not exist yet.
 
-- [ ] **Step 2: Add public split-binary helpers**
+- [x] **Step 2: Add public split-binary helpers**
 
 Add to `src/lib.rs`:
 
@@ -820,7 +820,7 @@ pub fn apply_runtime_project_root(
 }
 ```
 
-- [ ] **Step 3: Add core binary**
+- [x] **Step 3: Add core binary**
 
 Create `src/bin/zeroclaw-core.rs`:
 
@@ -850,7 +850,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-- [ ] **Step 4: Run binary check**
+- [x] **Step 4: Run binary check**
 
 Run:
 
@@ -866,7 +866,7 @@ Expected: pass.
 - Create: `src/bin/zeroclaw-edge.rs`
 - Test: compile check
 
-- [ ] **Step 1: Run failing binary check**
+- [x] **Step 1: Run failing binary check**
 
 Run:
 
@@ -876,7 +876,7 @@ cargo check --bin zeroclaw-edge
 
 Expected: fail because the binary does not exist.
 
-- [ ] **Step 2: Add edge binary**
+- [x] **Step 2: Add edge binary**
 
 Create `src/bin/zeroclaw-edge.rs`:
 
@@ -912,7 +912,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-- [ ] **Step 3: Run binary check**
+- [x] **Step 3: Run binary check**
 
 Run:
 
@@ -928,7 +928,7 @@ Expected: pass.
 - Modify tests added in earlier tasks
 - Documentation only if commands change
 
-- [ ] **Step 1: Run formatting**
+- [x] **Step 1: Run formatting**
 
 Run:
 
@@ -938,7 +938,7 @@ cargo fmt --all -- --check
 
 Expected: pass.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run:
 
@@ -952,7 +952,7 @@ cargo test -p zeroclaw-gateway edge_sources_do_not_call_agent_runtime_directly
 
 Expected: pass.
 
-- [ ] **Step 3: Run binary checks**
+- [x] **Step 3: Run binary checks**
 
 Run:
 
@@ -963,7 +963,7 @@ cargo check --bin zeroclaw-edge
 
 Expected: pass.
 
-- [ ] **Step 4: Run gateway clippy**
+- [x] **Step 4: Run gateway clippy**
 
 Run:
 
@@ -973,7 +973,7 @@ cargo clippy -p zeroclaw-gateway --all-targets -- -D warnings
 
 Expected: pass.
 
-- [ ] **Step 5: Record manual smoke command**
+- [x] **Step 5: Record manual smoke command**
 
 Manual smoke sequence:
 

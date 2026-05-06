@@ -19,6 +19,8 @@ pub mod api_plugins;
 pub mod api_webauthn;
 pub mod auth_rate_limit;
 pub mod canvas;
+pub mod core_client;
+pub mod core_client_grpc;
 pub mod grpc;
 pub mod hardware_context;
 pub mod node_tool;
@@ -41,6 +43,7 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{delete, get, patch, post},
 };
+use futures_util::StreamExt;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -365,6 +368,7 @@ fn normalize_max_keys(configured: usize, fallback: usize) -> usize {
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Mutex<Config>>,
+    pub core_client: Arc<dyn core_client::CoreAgentClient>,
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub temperature: f64,
@@ -434,6 +438,22 @@ pub struct AppState {
     >,
 }
 
+fn build_core_client(config: &Config) -> Result<Arc<dyn core_client::CoreAgentClient>> {
+    let endpoint = config
+        .gateway
+        .core
+        .endpoint
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("gateway.core.endpoint is required for edge mode"))?;
+
+    Ok(Arc::new(core_client_grpc::GrpcCoreAgentClient::new(
+        endpoint.to_string(),
+        config.gateway.core.bearer_token.clone(),
+        Duration::from_millis(config.gateway.core.timeout_ms),
+    )?))
+}
+
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
 #[allow(clippy::too_many_lines)]
 pub async fn run_gateway(
@@ -484,7 +504,7 @@ pub async fn run_gateway(
             &config.reliability,
             &zeroclaw_providers::provider_runtime_options_from_config(&config),
         )?);
-    // Three-step model resolution mirroring agent::Agent::from_config (#6099):
+    // Three-step model resolution matching the runtime default-selection rules (#6099):
     // (1) the fallback provider's `model`, (2) the first configured
     // `[providers.models.*]` model with a WARN naming what to set, (3) hard
     // fail with an actionable error. No silent vendor-default substitution.
@@ -958,8 +978,11 @@ pub async fn run_gateway(
         None
     };
 
+    let core_client = build_core_client(&config)?;
+
     let state = AppState {
         config: config_state,
+        core_client,
         provider,
         model,
         temperature,
@@ -1482,26 +1505,19 @@ async fn run_gateway_chat_with_tools(
     message: &str,
     session_id: Option<&str>,
 ) -> anyhow::Result<String> {
-    // Tests exercise webhook infrastructure (idempotency, auth, autosave)
-    // through handle_webhook, so dispatch to the mock provider directly
-    // instead of bootstrapping the full agent runtime.
-    #[cfg(test)]
-    {
-        let _ = session_id;
-        return state
-            .provider
-            .chat_with_system(None, message, &state.model, Some(state.temperature))
-            .await;
-    }
+    let request = core_client::CoreRunRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.unwrap_or("webhook").to_string(),
+        actor_id: "gateway".to_string(),
+        input: message.to_string(),
+    };
 
-    #[cfg(not(test))]
-    {
-        let config = state.config.lock().clone();
-        Box::pin(zeroclaw_runtime::agent::process_message(
-            config, message, session_id,
-        ))
-        .await
+    let mut stream = state.core_client.run_chat_streamed(request).await?;
+    let mut collected = core_client::CoreRunCollected::default();
+    while let Some(event) = stream.next().await {
+        collected.apply(&event?);
     }
+    Ok(collected.final_text)
 }
 
 /// Webhook request body
@@ -2581,10 +2597,54 @@ mod tests {
         assert_clone::<AppState>();
     }
 
+    #[test]
+    fn app_state_contains_core_agent_client() {
+        fn assert_client<T: Send + Sync>() {}
+        assert_client::<Arc<dyn crate::core_client::CoreAgentClient>>();
+
+        fn core_client_field(state: &AppState) -> &Arc<dyn crate::core_client::CoreAgentClient> {
+            &state.core_client
+        }
+
+        let _ = core_client_field;
+    }
+
+    #[test]
+    fn edge_sources_do_not_call_agent_runtime_directly() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir
+            .parent()
+            .and_then(std::path::Path::parent)
+            .unwrap();
+        let files = [
+            workspace_dir.join("crates/zeroclaw-gateway/src/ws.rs"),
+            workspace_dir.join("crates/zeroclaw-gateway/src/lib.rs"),
+        ];
+        let forbidden = [
+            concat!("Agent::", "from_config"),
+            concat!("Agent::", "from_config_with_session_cwd"),
+            concat!(".turn_", "streamed("),
+            concat!("zeroclaw_runtime::agent::", "process_message"),
+            concat!("zeroclaw_runtime::agent::", "Agent"),
+        ];
+
+        for file in files {
+            let contents = std::fs::read_to_string(&file).unwrap();
+            for needle in forbidden {
+                assert!(
+                    !contents.contains(needle),
+                    "{} must not contain forbidden edge agent call {needle}",
+                    file.display()
+                );
+            }
+        }
+    }
+
     #[tokio::test]
     async fn metrics_endpoint_returns_hint_when_prometheus_is_disabled() {
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider: Arc::new(MockProvider::default()),
             model: "test-model".into(),
             temperature: 0.0,
@@ -2659,6 +2719,7 @@ mod tests {
         let observer: Arc<dyn zeroclaw_runtime::observability::Observer> = Arc::new(wrapped);
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider: Arc::new(MockProvider::default()),
             model: "test-model".into(),
             temperature: 0.0,
@@ -3048,6 +3109,59 @@ mod tests {
     }
 
     #[derive(Default)]
+    struct MockCoreAgentClient;
+
+    #[async_trait]
+    impl crate::core_client::CoreAgentClient for MockCoreAgentClient {
+        async fn run_chat_streamed(
+            &self,
+            _request: crate::core_client::CoreRunRequest,
+        ) -> anyhow::Result<crate::core_client::CoreRunStream> {
+            let stream =
+                tokio_stream::iter(vec![Ok(crate::core_client::CoreRunEvent::Completed {
+                    final_text: "mock response".to_string(),
+                })]);
+            Ok(Box::pin(stream))
+        }
+
+        async fn cancel_run(
+            &self,
+            _run_id: &str,
+            _reason: &str,
+        ) -> anyhow::Result<crate::core_client::CoreCancelResult> {
+            Ok(crate::core_client::CoreCancelResult { accepted: true })
+        }
+    }
+
+    #[derive(Default)]
+    struct TrackingCoreAgentClient {
+        calls: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl crate::core_client::CoreAgentClient for TrackingCoreAgentClient {
+        async fn run_chat_streamed(
+            &self,
+            request: crate::core_client::CoreRunRequest,
+        ) -> anyhow::Result<crate::core_client::CoreRunStream> {
+            self.calls.lock().unwrap().push(request.input);
+            let stream =
+                tokio_stream::iter(vec![Ok(crate::core_client::CoreRunEvent::Completed {
+                    final_text: "tracked response".to_string(),
+                })]);
+            Ok(Box::pin(stream))
+        }
+
+        async fn cancel_run(
+            &self,
+            _run_id: &str,
+            _reason: &str,
+        ) -> anyhow::Result<crate::core_client::CoreCancelResult> {
+            Ok(crate::core_client::CoreCancelResult { accepted: true })
+        }
+    }
+
+    #[derive(Default)]
     struct TrackingMemory {
         keys: Mutex<Vec<String>>,
     }
@@ -3111,6 +3225,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn webhook_uses_core_agent_client() {
+        let provider: Arc<dyn Provider> = Arc::new(MockProvider::default());
+        let memory: Arc<dyn Memory> = Arc::new(MockMemory);
+        let client = Arc::new(TrackingCoreAgentClient::default());
+
+        let state = AppState {
+            config: Arc::new(Mutex::new(Config::default())),
+            core_client: client.clone(),
+            provider,
+            model: "test-model".into(),
+            temperature: 0.0,
+            mem: memory,
+            auto_save: false,
+            webhook_secret_hash: None,
+            pairing: Arc::new(PairingGuard::new(false, &[])),
+            trust_forwarded_headers: false,
+            rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100, 100)),
+            auth_limiter: Arc::new(auth_rate_limit::AuthRateLimiter::new()),
+            idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300), 1000)),
+            whatsapp: None,
+            whatsapp_app_secret: None,
+            linq: None,
+            linq_signing_secret: None,
+            nextcloud_talk: None,
+            nextcloud_talk_webhook_secret: None,
+            wati: None,
+            gmail_push: None,
+            observer: Arc::new(zeroclaw_runtime::observability::NoopObserver),
+            tools_registry: Arc::new(Vec::new()),
+            cost_tracker: None,
+            event_tx: tokio::sync::broadcast::channel(16).0,
+            event_buffer: Arc::new(sse::EventBuffer::new(16)),
+            shutdown_tx: tokio::sync::watch::channel(false).0,
+            reload_tx: None,
+            node_registry: Arc::new(nodes::NodeRegistry::new(16)),
+            path_prefix: String::new(),
+            web_dist_dir: None,
+            session_backend: None,
+            session_queue: std::sync::Arc::new(crate::session_queue::SessionActorQueue::new(
+                8, 30, 600,
+            )),
+            device_registry: None,
+            pending_pairings: None,
+            canvas_store: CanvasStore::new(),
+            cancel_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            #[cfg(feature = "webauthn")]
+            webauthn: None,
+        };
+
+        let body = Ok(Json(WebhookBody {
+            message: "hello from webhook".into(),
+        }));
+        let response = handle_webhook(State(state), test_connect_info(), HeaderMap::new(), body)
+            .await
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            client.calls.lock().unwrap().as_slice(),
+            &["hello from webhook"]
+        );
+    }
+
+    #[tokio::test]
     async fn webhook_idempotency_skips_duplicate_provider_calls() {
         let provider_impl = Arc::new(MockProvider::default());
         let provider: Arc<dyn Provider> = provider_impl.clone();
@@ -3118,6 +3296,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3200,6 +3379,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3294,6 +3474,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3360,6 +3541,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3431,6 +3613,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3507,6 +3690,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
@@ -3580,6 +3764,7 @@ mod tests {
 
         let state = AppState {
             config: Arc::new(Mutex::new(Config::default())),
+            core_client: Arc::new(MockCoreAgentClient),
             provider,
             model: "test-model".into(),
             temperature: 0.0,

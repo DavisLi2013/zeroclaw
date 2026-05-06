@@ -171,21 +171,15 @@ async fn handle_socket(
     // Resolve session ID: use provided or generate a new UUID
     let session_id = session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let session_key = format!("{GW_SESSION_PREFIX}{session_id}");
-    let mut memory_session_id = session_id.clone();
-
-    // Hydrate session metadata from persistence (if available). Agent
-    // construction is deferred until after the optional `connect` frame so the
-    // client can provide a per-session cwd for the security sandbox root.
+    // Hydrate session metadata from persistence (if available).
     let config = state.config.lock().clone();
     let mut resumed = false;
     let mut message_count: usize = 0;
     let mut effective_name: Option<String> = None;
-    let mut stored_messages = Vec::new();
     if let Some(ref backend) = state.session_backend {
         let messages = backend.load(&session_key);
         if !messages.is_empty() {
             message_count = messages.len();
-            stored_messages = messages;
             resumed = true;
         }
         // Set session name if provided (non-empty) on connect
@@ -237,7 +231,6 @@ async fn handle_socket(
                             "WebSocket connect params received"
                         );
                         if let Some(sid) = &cp.session_id {
-                            memory_session_id = sid.clone();
                             debug!(
                                 session_id = sid,
                                 "WebSocket connect session override received"
@@ -265,8 +258,8 @@ async fn handle_socket(
         }
     }
 
-    let session_cwd = match resolve_session_cwd(requested_cwd.as_deref(), &config.workspace_dir) {
-        Ok(cwd) => cwd,
+    match resolve_session_cwd(requested_cwd.as_deref(), &config.workspace_dir) {
+        Ok(_) => {}
         Err(e) => {
             let err = serde_json::json!({
                 "type": "error",
@@ -277,40 +270,6 @@ async fn handle_socket(
             return;
         }
     };
-
-    // Build a persistent Agent for this connection so history is maintained
-    // across turns. The session cwd becomes the security sandbox root; config
-    // workspace remains the daemon data directory.
-    let mut agent = match zeroclaw_runtime::agent::Agent::from_config_with_session_cwd(
-        &config,
-        Some(&session_cwd),
-    )
-    .await
-    {
-        Ok(a) => a,
-        Err(e) => {
-            tracing::error!(error = %e, "Agent initialization failed");
-            let err = serde_json::json!({
-                "type": "error",
-                "message": format!("Failed to initialise agent: {e}"),
-                "code": "AGENT_INIT_FAILED"
-            });
-            let _ = sender.send(Message::Text(err.to_string().into())).await;
-            let _ = sender
-                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                    code: 1011,
-                    reason: axum::extract::ws::Utf8Bytes::from_static(
-                        "Agent initialization failed",
-                    ),
-                })))
-                .await;
-            return;
-        }
-    };
-    agent.set_memory_session_id(Some(memory_session_id));
-    if !stored_messages.is_empty() {
-        agent.seed_history(&stored_messages);
-    }
 
     // Process the first message if it was not a connect frame
     if let Some(ref text) = first_msg_fallback {
@@ -323,8 +282,7 @@ async fn handle_socket(
                         let user_msg = zeroclaw_providers::ChatMessage::user(&content);
                         let _ = backend.append(&session_key, &user_msg);
                     }
-                    process_chat_message(&state, &mut agent, &mut sender, &content, &session_key)
-                        .await;
+                    process_chat_message(&state, &mut sender, &content, &session_key).await;
                 }
             } else {
                 let unknown_type = parsed["type"].as_str().unwrap_or("unknown");
@@ -439,7 +397,7 @@ async fn handle_socket(
                     let _ = backend.append(&session_key, &user_msg);
                 }
 
-                process_chat_message(&state, &mut agent, &mut sender, &content, &session_key).await;
+                process_chat_message(&state, &mut sender, &content, &session_key).await;
             }
 
             // ── Broadcast event (cron/heartbeat results) ──────────────
@@ -463,19 +421,40 @@ fn resolve_session_cwd(
         .map_err(|e| anyhow::anyhow!("cwd is not a usable directory ({}): {e}", cwd.display()))
 }
 
-/// Process a single chat message through the agent and send the response.
-///
-/// Uses [`Agent::turn_streamed`] so that intermediate text chunks, tool calls,
-/// and tool results are forwarded to the WebSocket client in real time.
+fn ws_message_from_core_event(
+    event: crate::core_client::CoreRunEvent,
+) -> Option<serde_json::Value> {
+    match event {
+        crate::core_client::CoreRunEvent::MessageDelta { delta } => {
+            Some(serde_json::json!({ "type": "chunk", "content": delta }))
+        }
+        crate::core_client::CoreRunEvent::ThinkingDelta { delta } => {
+            Some(serde_json::json!({ "type": "thinking", "content": delta }))
+        }
+        crate::core_client::CoreRunEvent::ToolCall { id, name, args } => {
+            Some(serde_json::json!({ "type": "tool_call", "id": id, "name": name, "args": args }))
+        }
+        crate::core_client::CoreRunEvent::ToolResult { id, name, output } => Some(
+            serde_json::json!({ "type": "tool_result", "id": id, "name": name, "output": output }),
+        ),
+        crate::core_client::CoreRunEvent::Cancelled { .. } => {
+            Some(serde_json::json!({ "type": "aborted" }))
+        }
+        crate::core_client::CoreRunEvent::Failed { message, .. } => {
+            Some(serde_json::json!({ "type": "error", "message": message }))
+        }
+        crate::core_client::CoreRunEvent::RunStarted { .. }
+        | crate::core_client::CoreRunEvent::Completed { .. } => None,
+    }
+}
+
+/// Process a single chat message through the core service and send the response.
 async fn process_chat_message(
     state: &AppState,
-    agent: &mut zeroclaw_runtime::agent::Agent,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     content: &str,
     session_key: &str,
 ) {
-    use zeroclaw_runtime::agent::TurnEvent;
-
     let provider_label = state
         .config
         .lock()
@@ -510,28 +489,15 @@ async fn process_chat_message(
             .insert(session_key.to_string(), cancel_token.clone());
     }
 
-    // Channel for streaming turn events from the agent.
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<TurnEvent>(64);
-
-    // Run the streamed turn concurrently: the agent produces events
-    // while we forward them to the WebSocket below.  We cannot move
-    // `agent` into a spawned task (it is `&mut`), so we use a join
-    // instead — `turn_streamed` writes to the channel and we drain it
-    // from the other branch.
-    let content_owned = content.to_string();
-    let session_key_owned = session_key.to_string();
-    let turn_fut = async {
-        zeroclaw_runtime::agent::loop_::scope_session_key(
-            Some(session_key_owned),
-            agent.turn_streamed(&content_owned, event_tx, Some(cancel_token.clone())),
-        )
-        .await
+    let request = crate::core_client::CoreRunRequest {
+        request_id: turn_id.clone(),
+        session_id: session_key.to_string(),
+        actor_id: "websocket".to_string(),
+        input: content.to_string(),
     };
 
-    // Drive both futures concurrently: the agent turn produces events
-    // and we relay them over WebSocket. Track streamed chunks so we
-    // can reconstruct partial content on cancellation.
-    //
+    let mut collected = crate::core_client::CoreRunCollected::default();
+
     // WHY incremental persistence: If the process crashes during streaming,
     // the assistant's response is lost — only the user message survives.
     // We append a placeholder assistant message on the first chunk, then
@@ -542,46 +508,41 @@ async fn process_chat_message(
     let mut last_partial_save = std::time::Instant::now();
     let partial_save_interval = std::time::Duration::from_millis(500);
 
-    let forward_fut = async {
-        while let Some(event) = event_rx.recv().await {
-            let ws_msg = match event {
-                TurnEvent::Chunk { ref delta } => {
-                    accumulated_text.push_str(delta);
+    let result = async {
+        let mut stream = state.core_client.run_chat_streamed(request).await?;
+        while let Some(event) = stream.next().await {
+            if cancel_token.is_cancelled() {
+                let _ = state
+                    .core_client
+                    .cancel_run(&turn_id, "websocket abort")
+                    .await;
+                break;
+            }
 
-                    // Incremental persistence: save partial content so it
-                    // survives a crash. First chunk appends, subsequent
-                    // chunks update in-place.
-                    if last_partial_save.elapsed() >= partial_save_interval {
-                        if let Some(ref backend) = state.session_backend {
-                            let partial =
-                                zeroclaw_providers::ChatMessage::assistant(&accumulated_text);
-                            if partial_saved {
-                                let _ = backend.update_last(session_key, &partial);
-                            } else {
-                                let _ = backend.append(session_key, &partial);
-                                partial_saved = true;
-                            }
+            let event = event?;
+            if let crate::core_client::CoreRunEvent::MessageDelta { delta } = &event {
+                accumulated_text.push_str(delta);
+                if last_partial_save.elapsed() >= partial_save_interval {
+                    if let Some(ref backend) = state.session_backend {
+                        let partial = zeroclaw_providers::ChatMessage::assistant(&accumulated_text);
+                        if partial_saved {
+                            let _ = backend.update_last(session_key, &partial);
+                        } else {
+                            let _ = backend.append(session_key, &partial);
+                            partial_saved = true;
                         }
-                        last_partial_save = std::time::Instant::now();
                     }
-
-                    serde_json::json!({ "type": "chunk", "content": delta })
+                    last_partial_save = std::time::Instant::now();
                 }
-                TurnEvent::Thinking { delta } => {
-                    serde_json::json!({ "type": "thinking", "content": delta })
-                }
-                TurnEvent::ToolCall { id, name, args } => {
-                    serde_json::json!({ "type": "tool_call", "id": id, "name": name, "args": args })
-                }
-                TurnEvent::ToolResult { id, name, output } => {
-                    serde_json::json!({ "type": "tool_result", "id": id, "name": name, "output": output })
-                }
-            };
-            let _ = sender.send(Message::Text(ws_msg.to_string().into())).await;
+            }
+            collected.apply(&event);
+            if let Some(ws_msg) = ws_message_from_core_event(event) {
+                let _ = sender.send(Message::Text(ws_msg.to_string().into())).await;
+            }
         }
-    };
-
-    let (result, ()) = tokio::join!(turn_fut, forward_fut);
+        anyhow::Ok(collected.final_text.clone())
+    }
+    .await;
 
     // ── Remove cancel token (turn finished) ──────────────────────
     {
@@ -590,50 +551,6 @@ async fn process_chat_message(
             .lock()
             .expect("cancel_tokens lock poisoned")
             .remove(session_key);
-    }
-
-    // Check if this turn was cancelled. `turn_streamed` propagates
-    // `ToolLoopCancelled` through anyhow, so we detect it here.
-    let was_cancelled = match &result {
-        Err(e) => zeroclaw_runtime::agent::loop_::is_tool_loop_cancelled(e),
-        Ok(_) => false,
-    };
-
-    if was_cancelled {
-        // Store partial content with interruption marker so the
-        // conversation stays coherent for subsequent turns.
-        let truncated = if accumulated_text.is_empty() {
-            "[interrupted by user]".to_string()
-        } else {
-            format!("{accumulated_text}\n\n[interrupted by user]")
-        };
-
-        if let Some(ref backend) = state.session_backend {
-            let assistant_msg = zeroclaw_providers::ChatMessage::assistant(&truncated);
-            if partial_saved {
-                let _ = backend.update_last(session_key, &assistant_msg);
-            } else {
-                let _ = backend.append(session_key, &assistant_msg);
-            }
-        }
-
-        // Inform the client the turn was aborted
-        let aborted = serde_json::json!({ "type": "aborted" });
-        let _ = sender.send(Message::Text(aborted.to_string().into())).await;
-
-        // Set session state to idle
-        if let Some(ref backend) = state.session_backend {
-            let _ = backend.set_session_state(session_key, "idle", None);
-        }
-
-        // Broadcast agent_end event
-        let _ = state.event_tx.send(serde_json::json!({
-            "type": "agent_end",
-            "provider": provider_label,
-            "model": state.model,
-        }));
-
-        return;
     }
 
     match result {
@@ -742,6 +659,17 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("authorization", "Bearer zc_test123".parse().unwrap());
         assert_eq!(extract_ws_token(&headers, None), Some("zc_test123"));
+    }
+
+    #[test]
+    fn ws_message_from_core_event_maps_delta() {
+        let value = ws_message_from_core_event(crate::core_client::CoreRunEvent::MessageDelta {
+            delta: "hi".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(value["type"], "chunk");
+        assert_eq!(value["content"], "hi");
     }
 
     #[test]
