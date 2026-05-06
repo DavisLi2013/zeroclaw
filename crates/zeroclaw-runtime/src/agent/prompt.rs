@@ -412,10 +412,9 @@ mod tests {
             model_name: "test-model",
             tools: &tools,
             skills: &[],
-            skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
+            skills_prompt_mode: zeroclaw_config::schema::SkillsPromptInjectionMode::Full,
             identity_config: None,
             dispatcher_instructions: "instr",
-            tool_descriptions: None,
             security_summary: None,
             autonomy_level: AutonomyLevel::Supervised,
         };
