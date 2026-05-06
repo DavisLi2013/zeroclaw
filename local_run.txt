@@ -63,3 +63,18 @@ powershell -ExecutionPolicy Bypass -File .\run-zeroclaw.ps1 agent --project-root
 
   请一步一步思考后实现上面的目标 。
 
+
+百万级别的C端用户--------->请求到达服务器1 --------> 需要利用你设计的协议X ---------> 到达服务器2，服务器2上部署有zeroclaw.exe，用于处理具体的请求并给出回应。
+目前已初步选定协议X为 grpc，并且你已经写了相关文档。
+
+把现有的 zeroclaw.exe 看能否分离出一个新的 exe， 新的 exe通过 grpc 与新的zeroclaw.exe仅通过grpc通信， 而webui等操作都先经过新的exe处理。
+即 把现有 webui <---> zeroclaw.exe 数据流，变更成 webui <---> 新的 exe  <--grpc->  新的zeroclaw.exe . 新的zeroclaw.exe仅处理接收到的grpc协议。 而与业务相关的gateway channel等都放到新的exe里。
+你先给出可行性及计划，待我确认后才真正开始调整代码。
+  请一步一步思考后实现上面的目标 。
+
+
+
+建议 zeroclaw-edge.exe + zeroclaw-core.exe.  WebSocket、REST chat、webhook/channel  等都放到  zeroclaw-edge.exe 里， zeroclaw-edge.exe 通过grpc与zeroclaw-core.exe直接通信，webui仅与 zeroclaw-edge.exe直接通信，且webui不与 zeroclaw-core.exe通信 。 
+请重新按上面的要求给出可行性及计划，待我确认后才真正开始调整代码
+  请一步一步思考后实现上面的目标 。
+
