@@ -1312,7 +1312,110 @@ async function loadEventHistory(): Promise<SseEvent[]> {
 }
 ```
 
-### 9.12 同源前端中的最小组合流程
+### 9.12 查询 Gateway 状态
+
+已存在协议：`GET /api/status`。
+
+```ts
+interface StatusResponse {
+  provider: string | null;
+  model: string;
+  temperature: number;
+  uptime_seconds: number;
+  gateway_port: number;
+  locale: string;
+  memory_backend: string;
+  paired: boolean;
+  channels: Record<string, boolean>;
+  health: unknown;
+}
+
+async function loadStatus(): Promise<StatusResponse> {
+  return apiFetch<StatusResponse>("/api/status");
+}
+```
+
+### 9.13 获取健康快照
+
+已存在协议：`GET /api/health`。
+
+```ts
+interface HealthResponse {
+  status: "ok" | "error";
+  components: Record<string, { status: string; last_error: string | null }>;
+}
+
+async function loadHealth(): Promise<HealthResponse> {
+  return apiFetch<HealthResponse>("/api/health");
+}
+```
+
+### 9.14 重命名会话
+
+已存在协议：`PUT /api/sessions/{id}`。
+
+```ts
+interface RenameSessionRequest {
+  name: string;
+}
+
+interface RenameSessionResponse {
+  session_id: string;
+  name: string;
+}
+
+async function renameSession(
+  sessionId: string,
+  newName: string,
+): Promise<RenameSessionResponse> {
+  return apiFetch<RenameSessionResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ name: newName }),
+    },
+  );
+}
+```
+
+### 9.15 删除会话
+
+已存在协议：`DELETE /api/sessions/{id}`。
+
+```ts
+interface DeleteSessionResponse {
+  deleted: boolean;
+  session_id: string;
+}
+
+async function deleteSession(sessionId: string): Promise<DeleteSessionResponse> {
+  return apiFetch<DeleteSessionResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
+}
+```
+
+### 9.16 查询会话运行状态
+
+已存在协议：`GET /api/sessions/{id}/state`。
+
+```ts
+interface SessionStateResponse {
+  session_id: string;
+  state: "idle" | "running";
+  turn_id?: string;
+  turn_started_at?: string;
+}
+
+async function getSessionState(sessionId: string): Promise<SessionStateResponse> {
+  return apiFetch<SessionStateResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/state`,
+  );
+}
+```
+
+### 9.17 同源前端中的最小组合流程
 
 这个例子只组合已存在协议：`/health`、`/pair/code`、`/pair`、`/ws/chat`。
 
