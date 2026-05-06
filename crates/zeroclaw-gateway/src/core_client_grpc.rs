@@ -64,6 +64,7 @@ impl CoreAgentClient for GrpcCoreAgentClient {
     async fn run_chat_streamed(&self, request: CoreRunRequest) -> anyhow::Result<CoreRunStream> {
         let mut client = self.connect().await?;
         let create = self.request(build_create_run_request(request))?;
+        client.ready().await?;
         let create_response: pb::CreateRunResponse = client
             .unary(
                 create,
@@ -77,6 +78,7 @@ impl CoreAgentClient for GrpcCoreAgentClient {
             run_id: create_response.run_id,
             after_sequence: 0,
         })?;
+        client.ready().await?;
         let stream = client
             .server_streaming(
                 stream_request,
@@ -94,6 +96,7 @@ impl CoreAgentClient for GrpcCoreAgentClient {
 
     async fn cancel_run(&self, run_id: &str, reason: &str) -> anyhow::Result<CoreCancelResult> {
         let mut client = self.connect().await?;
+        client.ready().await?;
         let response: pb::CancelRunResponse = client
             .unary(
                 self.request(pb::CancelRunRequest {
@@ -189,6 +192,9 @@ pub fn map_grpc_event(event: pb::RunEvent) -> anyhow::Result<CoreRunEvent> {
 mod tests {
     use super::*;
     use crate::grpc::pb;
+    use futures_util::Stream;
+    use std::pin::Pin;
+    use tonic::{Response, Status};
 
     #[test]
     fn maps_message_delta_event() {
@@ -226,5 +232,121 @@ mod tests {
         assert_eq!(grpc.request_id, "req-a");
         assert_eq!(grpc.session_id, "session-a");
         assert_eq!(grpc.input.unwrap().text, "hello");
+    }
+
+    #[derive(Clone)]
+    struct MockAgentService;
+
+    #[tonic::async_trait]
+    impl pb::AgentService for MockAgentService {
+        async fn create_run(
+            &self,
+            request: tonic::Request<pb::CreateRunRequest>,
+        ) -> Result<Response<pb::CreateRunResponse>, Status> {
+            let request = request.into_inner();
+            Ok(Response::new(pb::CreateRunResponse {
+                run_id: "run-a".to_string(),
+                request_id: request.request_id,
+                session_id: request.session_id,
+                status: pb::RunStatus::Running as i32,
+                duplicate: false,
+            }))
+        }
+
+        type StreamRunStream = Pin<Box<dyn Stream<Item = Result<pb::RunEvent, Status>> + Send>>;
+
+        async fn stream_run(
+            &self,
+            _request: tonic::Request<pb::StreamRunRequest>,
+        ) -> Result<Response<Self::StreamRunStream>, Status> {
+            let events = vec![
+                Ok(pb::RunEvent {
+                    run_id: "run-a".to_string(),
+                    request_id: "req-a".to_string(),
+                    session_id: "session-a".to_string(),
+                    sequence: 1,
+                    occurred_at: None,
+                    event_type: "message.delta".to_string(),
+                    payload: Some(pb::run_event::Payload::MessageDelta(pb::MessageDelta {
+                        delta: "hello".to_string(),
+                    })),
+                }),
+                Ok(pb::RunEvent {
+                    run_id: "run-a".to_string(),
+                    request_id: "req-a".to_string(),
+                    session_id: "session-a".to_string(),
+                    sequence: 2,
+                    occurred_at: None,
+                    event_type: "run.completed".to_string(),
+                    payload: Some(pb::run_event::Payload::Completed(pb::RunCompleted {
+                        final_text: "hello".to_string(),
+                    })),
+                }),
+            ];
+            Ok(Response::new(Box::pin(futures_util::stream::iter(events))))
+        }
+
+        async fn cancel_run(
+            &self,
+            _request: tonic::Request<pb::CancelRunRequest>,
+        ) -> Result<Response<pb::CancelRunResponse>, Status> {
+            Ok(Response::new(pb::CancelRunResponse {
+                run_id: "run-a".to_string(),
+                accepted: true,
+                status: pb::RunStatus::Cancelled as i32,
+            }))
+        }
+
+        async fn get_run(
+            &self,
+            _request: tonic::Request<pb::GetRunRequest>,
+        ) -> Result<Response<pb::GetRunResponse>, Status> {
+            Err(Status::not_found("not found"))
+        }
+    }
+
+    #[tokio::test]
+    async fn grpc_core_client_waits_for_readiness_before_each_rpc() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let incoming = futures_util::stream::unfold(listener, |listener| async {
+            let accepted = listener
+                .accept()
+                .await
+                .map(|(stream, _addr)| stream)
+                .map_err(|err| std::io::Error::new(err.kind(), err.to_string()));
+            Some((accepted, listener))
+        });
+        let server = tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(pb::AgentServiceServer::new(MockAgentService))
+                .serve_with_incoming(incoming)
+                .await
+        });
+
+        let client =
+            GrpcCoreAgentClient::new(format!("http://{addr}"), None, Duration::from_secs(5))
+                .unwrap();
+
+        let stream = client
+            .run_chat_streamed(crate::core_client::CoreRunRequest {
+                request_id: "req-a".to_string(),
+                session_id: "session-a".to_string(),
+                actor_id: "user-a".to_string(),
+                input: "hello".to_string(),
+            })
+            .await
+            .unwrap();
+        let events = stream.collect::<Vec<_>>().await;
+
+        server.abort();
+
+        assert!(matches!(
+            events.as_slice(),
+            [
+                Ok(crate::core_client::CoreRunEvent::MessageDelta { delta }),
+                Ok(crate::core_client::CoreRunEvent::Completed { final_text }),
+            ] if delta == "hello" && final_text == "hello"
+        ));
     }
 }
