@@ -27,6 +27,7 @@
 
 - [CLI](./reference/cli.md)
 - [Config](./reference/config.md)
+- [Project-root sessions](./project-root-sessions.md)
 - [API (rustdoc)](./api.md)
 - [Gateway HTTP API](./gateway/api.md)
 

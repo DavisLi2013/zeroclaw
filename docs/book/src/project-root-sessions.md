@@ -1,16 +1,16 @@
 # Project-Root Sessions
 
-ZeroClaw can run against multiple independent projects as long as each session or runtime is created with an explicit `project_root`.
+ZeroClaw can run against multiple independent projects by binding each session or runtime to a project root.
 
 This applies to:
 
 - `zeroclaw agent`
 - `zeroclaw daemon`
-- ACP `session/new`
+- ACP `session/new` with `project_root` / `projectRoot`
 
 ## Why This Exists
 
-Without an explicit project root, workspace-scoped behavior depends on global config discovery and can drift across sessions. Requiring `project_root` makes the runtime boundary explicit and repeatable.
+Without an explicit project root, workspace-scoped behavior depends on global config discovery and can drift across sessions. Passing `project_root` makes the runtime boundary explicit and repeatable.
 
 For a validated `project_root`, ZeroClaw binds runtime workspace behavior to that directory:
 
@@ -68,7 +68,7 @@ zeroclaw daemon --project-root /srv/app-b --port 42618
 
 ## ACP Usage
 
-ACP does not infer workspace from `cwd` anymore for session creation. `session/new` must send `project_root`.
+ACP accepts `project_root` for project-bound session creation. This is the preferred form for editor and IDE clients because it binds both the file/shell boundary and workspace-scoped runtime state to the project.
 
 Accepted field names:
 
@@ -87,7 +87,17 @@ Example response:
 {"jsonrpc":"2.0","result":{"sessionId":"...","workspaceDir":"D:\\workspace\\app-a"},"id":1}
 ```
 
-If `project_root` is missing or invalid, ACP returns `INVALID_PARAMS`.
+If `project_root` is invalid, ACP returns `INVALID_PARAMS`.
+
+Compatibility fields are still accepted:
+
+- `cwd`
+- `workspaceDir`
+- `workspace_dir`
+
+These fields only set the per-session file/shell boundary. Memory, identity, cron, and other persistent runtime state remain under the server's configured `workspace_dir`. If neither `project_root` nor a compatibility cwd field is present, ACP uses the server launch directory as a compatibility fallback.
+
+When both forms are present, `project_root` wins.
 
 ## Isolation Model
 
@@ -95,13 +105,14 @@ Isolation is per session/process:
 
 - one `agent` invocation = one project root
 - one `daemon` process = one project root
-- one ACP session = one project root
+- one ACP session with `project_root` = one project root
+- one ACP session with only `cwd` = one temporary sandbox root backed by the server workspace
 
 There is no in-session project switching in this model.
 
 ## Notes
 
 - Config discovery still happens normally at startup.
-- For session-bound entrypoints, the selected `project_root` becomes the runtime workspace after validation.
-- Session-bound config state is redirected to `project_root/.zeroclaw/config.toml`.
-
+- For project-root-bound entrypoints, the selected `project_root` becomes the runtime workspace after validation.
+- Project-root-bound config state is redirected to `project_root/.zeroclaw/config.toml`.
+- ACP `cwd` compatibility mode does not redirect config state; it only changes the session tool boundary.

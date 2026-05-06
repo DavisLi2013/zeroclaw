@@ -419,7 +419,9 @@ Examples:
   zeroclaw acp --max-sessions 5       # limit concurrent sessions
 
 ACP note:
-  session/new must include project_root or projectRoot.")]
+  session/new should send project_root or projectRoot for project-bound sessions.
+  cwd, workspaceDir, and workspace_dir remain accepted compatibility aliases
+  for sandbox-only session roots.")]
     Acp {
         /// Maximum concurrent sessions (default: 10)
         #[arg(long)]

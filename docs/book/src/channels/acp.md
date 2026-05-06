@@ -51,19 +51,26 @@ The server always responds `protocolVersion: 1`. If you send a client-side `prot
 
 ### `session/new`
 
-Open an isolated agent session. The optional `cwd` parameter (aliases: `workspaceDir`, `workspace_dir`) pins the per-session file-access boundary — it becomes the `workspace_dir` inside the `SecurityPolicy` that all file tools enforce. The agent's persistent data directory (memory, identity, cron) remains the daemon-level `workspace_dir` from config.
+Open an isolated agent session. ZeroClaw accepts two workspace-binding modes:
+
+- `project_root` (alias: `projectRoot`) binds the whole session to a project. The path is canonicalized, becomes the file/shell workspace boundary, and session-local runtime state is redirected under `project_root/.zeroclaw/config.toml`.
+- `cwd` (aliases: `workspaceDir`, `workspace_dir`) is the compatibility form. It pins only the per-session file/shell boundary; persistent data such as memory, identity, and cron remains under the server's configured `workspace_dir`.
+
+Prefer `project_root` for IDE and editor integrations that can identify the project root. Use `cwd` only when you intentionally want a temporary sandbox boundary without moving ZeroClaw's workspace-scoped state.
 
 ```json
-→ {"jsonrpc":"2.0","id":2,"method":"session/new","params":{
-    "cwd": "/path/to/project"
+-> {"jsonrpc":"2.0","id":2,"method":"session/new","params":{
+    "project_root": "/path/to/project"
   }}
-← {"jsonrpc":"2.0","id":2,"result":{
+<- {"jsonrpc":"2.0","id":2,"result":{
     "sessionId": "s-ab12cd",
     "workspaceDir": "/path/to/project"
   }}
 ```
 
-`cwd` is canonicalized on intake — `../` traversal cannot escape the intended root. If `cwd` is omitted, the server uses the daemon's launch directory.
+`project_root` and `cwd` are canonicalized on intake; `../` traversal cannot escape the intended root. If both are omitted, the server uses the daemon's launch directory as a compatibility fallback.
+
+When both `project_root` and `cwd` are provided, `project_root` wins.
 
 ### `session/prompt`
 
@@ -214,18 +221,19 @@ ACP v0 clients (using the flat `{streaming, maxSessions, ...}` initialize respon
 - Use `sessionUpdate` (not `kind`) to discriminate `session/update` notifications.
 - Parse `session/prompt` results as `{sessionId, stopReason, content}` (not `{finished, usage}`).
 - Implement `session/request_permission` response handling — the approval mechanism moved from a server notification to a client-answered RPC.
-- Drop the `systemPrompt` param from `session/new` — it is not read.
+- Send `project_root` (preferred) or `cwd` when opening `session/new`; `systemPrompt` is ignored.
 
 ## Security
 
-ACP inherits the running config's autonomy level. When `[autonomy] level = "supervised"`, medium-risk tool calls trigger approval via the ACP back-channel — a `session/request_permission` outbound request the client must acknowledge. In `full` mode, tool calls execute without approval and `workspace_only` is implicitly disabled (the agent can reach paths outside the session cwd); `forbidden_paths` still apply.
+ACP inherits the running config's autonomy level. When `[autonomy] level = "supervised"`, medium-risk tool calls trigger approval via the ACP back-channel - a `session/request_permission` outbound request the client must acknowledge. In `full` mode, tool calls execute without approval and `workspace_only` is implicitly disabled (the agent can reach paths outside the session workspace); `forbidden_paths` still apply.
 
-The `cwd` from `session/new` becomes the `SecurityPolicy` workspace boundary used by all file and shell tools for that session. Note: the agent's system prompt currently reflects the daemon's global `workspace_dir` rather than the session `cwd` — this does not affect enforcement, only the directory the model believes it is working in.
+The selected `project_root` or `cwd` from `session/new` becomes the `SecurityPolicy` workspace boundary used by all file and shell tools for that session. With `project_root`, the session's config clone also uses that project as `workspace_dir`, so memory and workspace-scoped runtime state are isolated to the project. With `cwd`, only the tool boundary changes; persistent runtime state remains on the server's configured workspace.
 
 ## Code reference
 
 - ACP server: `crates/zeroclaw-channels/src/orchestrator/acp_server.rs`
 - ACP back-channel: `crates/zeroclaw-channels/src/acp_channel.rs`
+- Project-root binding: `crates/zeroclaw-config/src/project_root.rs`
 - Per-session path enforcement: `crates/zeroclaw-config/src/policy.rs` (`SecurityPolicy::from_config`), `crates/zeroclaw-runtime/src/agent/agent.rs` (`from_config_with_session_cwd_and_mcp`)
 - OS-level sandbox detection/backends: `crates/zeroclaw-runtime/src/security/detect.rs`, `landlock.rs`, `bubblewrap.rs`, `seatbelt.rs`
 
