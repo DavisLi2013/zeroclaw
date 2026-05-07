@@ -80,9 +80,36 @@ service AgentService {
 
 ### 幂等性说明
 
+#### 什么是 `caller_key`？
+
+`caller_key` 是服务端用于标识调用方身份的唯一标识符，**不是** gRPC 请求中的显式字段，而是由服务端根据认证信息自动生成的：
+
+1. **认证开启时** (`require_pairing = true`)：
+   - 服务端从 gRPC metadata 中提取 `Authorization: Bearer <token>`
+   - 对 token 进行 SHA-256 哈希，得到 `caller_key`
+   - 例如：token `zc_abc123...` → `caller_key` = `sha256("zc_abc123...")`
+
+2. **认证关闭时** (`require_pairing = false`)：
+   - 所有请求使用固定的 `caller_key = "anonymous"`
+
+#### 幂等性机制
+
 - 服务端使用 `(caller_key, request_id)` 作为幂等键
-- 如果相同的 `request_id` 被同一客户端重复提交，将返回已存在的 `run_id`，且 `duplicate=true`
+- 如果相同的 `request_id` 被**同一客户端**（相同 token）重复提交，将返回已存在的 `run_id`，且 `duplicate=true`
 - 重复请求不会创建新的运行会话
+
+#### 重要特性
+
+1. **隔离性**：不同客户端（不同 token）可以使用相同的 `request_id` 而不会冲突
+   - 客户端 A（token1）+ `request_id="req-001"` → run_id_1
+   - 客户端 B（token2）+ `request_id="req-001"` → run_id_2（不同的运行）
+
+2. **安全性**：`caller_key` 使用 SHA-256 哈希，即使配置文件泄露也不会暴露原始 token
+
+3. **客户端实现建议**：
+   - 使用 UUID 或时间戳生成唯一的 `request_id`
+   - 如果需要重试，使用相同的 `request_id` 以利用幂等性
+   - 不需要关心 `caller_key` 的生成，服务端会自动处理
 
 ### 示例代码 (Java)
 
@@ -462,9 +489,28 @@ public class BearerTokenCallCredentials extends CallCredentials {
 
 ### 配置说明
 
-- 如果 axi-agent-core 配置了 `gateway.require_pairing = true`，则必须提供有效的 Bearer Token
+- 如果 zeroclaw-core 配置了 `gateway.require_pairing = true`，则必须提供有效的 Bearer Token
 - Token 需要在 `gateway.paired_tokens` 列表中预先配置
 - 如果 `require_pairing = false`，则可以匿名访问（不推荐生产环境）
+
+### Token 与 caller_key 的关系
+
+1. **Token 生成**：
+   - 通过配对（pairing）流程获得，格式为 `zc_<64位十六进制>`
+   - 例如：`zc_a1b2c3d4...`（共 67 字符：前缀 3 字符 + 64 字符十六进制）
+
+2. **caller_key 生成**：
+   - 服务端接收到请求后，对 Bearer Token 进行 SHA-256 哈希
+   - `caller_key = sha256(token)`
+   - 这个哈希值用于：
+     - 幂等性控制：`(caller_key, request_id)` 作为唯一键
+     - 客户端隔离：不同 token 的请求互不干扰
+     - 安全存储：配置文件中只存储哈希值，不存储明文 token
+
+3. **客户端无需关心**：
+   - 客户端只需在每次请求中携带 `Authorization: Bearer <token>`
+   - `caller_key` 的生成和使用完全由服务端处理
+   - 客户端不需要计算或传递 `caller_key`
 
 ---
 
