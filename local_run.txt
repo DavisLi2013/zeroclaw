@@ -194,3 +194,269 @@ note: run with RUST_BACKTRACE=1 environment variable to display a backtrace 。
 
 在分别成功启动zeroclaw-core  、zeroclaw-edge后，在web端  http://127.0.0.1:42617/agent 里发送一条消息后出现上面的问题： zeroclaw-core.exe crash.请一步一步思考后解决此问题
 
+
+# 先启动 core 服务
+powershell -ExecutionPolicy Bypass -File .\start-zeroclaw-core.ps1  --project-root D:\workspace\axi-research\zeroclaw 
+
+# 再启动 edge 服务
+powershell -ExecutionPolicy Bypass -File .\start-zeroclaw-edge.ps1  --project-root D:\workspace\axi-research\zeroclaw 
+
+[Error] code: 'The request does not have valid authentication credentials', message: "missing or invalid bearer token 。
+
+在分别成功启动zeroclaw-core  、zeroclaw-edge后，在web端  http://127.0.0.1:42617/agent 里发送一条消息后出现上面的问题：[Error] code: 'The request does not have valid authentication credentials', message: "missing or invalid bearer token 。 .请一步一步思考后解决此问题
+
+
+
+
+
+
+
+-----------------------------
+
+
+ 重启zeroclaw-core  、zeroclaw-edge后，  问题仍没有解决。请一步一步详细分析并解决问题。
+
+
+
+
+D:\workspace\axi-research\zeroclaw>powershell -ExecutionPolicy Bypass -File .\start-zeroclaw-core.ps1  --project-root D:\workspace\axi-research\zeroclaw
+[2m2026-05-07T03:08:41.404351Z[0m [32m INFO[0m [2mzeroclaw_config::schema[0m[2m:[0m Config loaded [3mpath[0m[2m=[0mC:\Users\Administrator\.zeroclaw\config.toml [3mworkspace[0m[2m=[0mC:\Users\Administrator\.zeroclaw\workspace [3msource[0m[2m=[0m"default" [3minitialized[0m[2m=[0mtrue
+[2m2026-05-07T03:08:41.406926Z[0m [32m INFO[0m [2mzeroclaw_gateway::grpc[0m[2m:[0m ZeroClaw gRPC listening on 127.0.0.1:42618
+[2m2026-05-07T03:09:31.382242Z[0m [34mDEBUG[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mSettings { flags: (0x0), initial_window_size: 1048576, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.392941Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mSettings { flags: (0x0), enable_push: 0, initial_window_size: 2097152, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.393196Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mSettings { flags: (0x1: ACK) }
+[2m2026-05-07T03:09:31.394395Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mWindowUpdate { stream_id: StreamId(0), size_increment: 5177345 }
+[2m2026-05-07T03:09:31.396253Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.399598Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mWindowUpdate { stream_id: StreamId(0), size_increment: 983041 }
+[2m2026-05-07T03:09:31.402592Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(1) }
+[2m2026-05-07T03:09:31.402875Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(1), flags: (0x1: END_STREAM) }
+[2m2026-05-07T03:09:31.409338Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mSettings { flags: (0x1: ACK) }
+[2m2026-05-07T03:09:31.410709Z[0m [34mDEBUG[0m [2mzeroclaw_runtime::security::detect[0m[2m:[0m Docker sandbox skipped: runtime.kind = "native" overrides auto-detection
+[2m2026-05-07T03:09:31.411845Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::proto::settings[0m[2m:[0m received settings ACK; applying Settings { flags: (0x0), initial_window_size: 1048576, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.413876Z[0m [32m INFO[0m [2mzeroclaw_runtime::security::detect[0m[2m:[0m No sandbox backend available, using application-layer security
+[2m2026-05-07T03:09:31.414330Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.414982Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(1) }
+[2m2026-05-07T03:09:31.415281Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x5: END_HEADERS | END_STREAM) }
+[2m2026-05-07T03:09:31.425106Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(3), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.427098Z[0m [34mDEBUG[0m [2mzeroclaw_providers::anthropic[0m[2m:[0m Anthropic stream_chat request [3mmax_tokens[0m[2m=[0m4096 [3mmodel[0m[2m=[0mclaude-sonnet-4-6
+[2m2026-05-07T03:09:31.427365Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:31.428579Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3), flags: (0x1: END_STREAM) }
+[2m2026-05-07T03:09:31.429525Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(3), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.429805Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:31.431305Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 198.18.0.65:443
+[2m2026-05-07T03:09:31.441433Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 198.18.0.65:443
+[2m2026-05-07T03:09:35.635052Z[0m [34mDEBUG[0m [2mzeroclaw_providers::anthropic[0m[2m:[0m Anthropic stream: message_start [3mmodel[0m[2m=[0mclaude-sonnet-4-6 [3minput_tokens[0m[2m=[0m20436
+[2m2026-05-07T03:09:35.678109Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.732598Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.785891Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.892733Z[0m [34mDEBUG[0m [2mzeroclaw_providers::anthropic[0m[2m:[0m Anthropic stream: message_delta [3mstop_reason[0m[2m=[0mend_turn [3moutput_tokens[0m[2m=[0m16
+[2m2026-05-07T03:09:35.892772Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.892973Z[0m [34mDEBUG[0m [2mzeroclaw_providers::anthropic[0m[2m:[0m Anthropic stream: message_stop
+[2m2026-05-07T03:09:35.897827Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mServer[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+
+D:\workspace\axi-research\zeroclaw>powershell -ExecutionPolicy Bypass -File .\start-zeroclaw-edge.ps1  --project-root D:\workspace\axi-research\zeroclaw
+[2m2026-05-07T03:09:21.081083Z[0m [32m INFO[0m [2mzeroclaw_config::schema[0m[2m:[0m Config loaded [3mpath[0m[2m=[0mC:\Users\Administrator\.zeroclaw\config.toml [3mworkspace[0m[2m=[0mC:\Users\Administrator\.zeroclaw\workspace [3msource[0m[2m=[0m"default" [3minitialized[0m[2m=[0mtrue
+[2m2026-05-07T03:09:21.084851Z[0m [34mDEBUG[0m [2mzeroclaw_runtime::security::detect[0m[2m:[0m Docker sandbox skipped: runtime.kind = "native" overrides auto-detection
+[2m2026-05-07T03:09:21.084953Z[0m [32m INFO[0m [2mzeroclaw_runtime::security::detect[0m[2m:[0m No sandbox backend available, using application-layer security
+[2m2026-05-07T03:09:21.094172Z[0m [32m INFO[0m [2mzeroclaw_gateway[0m[2m:[0m Gateway session persistence enabled (SQLite)
+[2m2026-05-07T03:09:21.094866Z[0m [32m INFO[0m [2mzeroclaw_gateway[0m[2m:[0m Web dashboard: serving from web/dist
+🦀 ZeroClaw Gateway listening on http://127.0.0.1:42617
+  🌐 Web Dashboard: http://127.0.0.1:42617/
+  ⚠️  Pairing: DISABLED (all requests accepted)
+
+  POST /pair      — pair a new client (X-Pairing-Code header)
+  POST /webhook   — {"message": "your prompt"}
+  GET  /api/*     — REST API (bearer token required)
+  GET  /ws/chat   — WebSocket agent chat
+  GET  /health    — health check
+  GET  /metrics   — Prometheus metrics
+  Press Ctrl+C to stop.
+
+[2m2026-05-07T03:09:31.371702Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 127.0.0.1:42618
+[2m2026-05-07T03:09:31.382011Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 127.0.0.1:42618
+[2m2026-05-07T03:09:31.382337Z[0m [34mDEBUG[0m [2mh2::client[0m[2m:[0m binding client connection
+[2m2026-05-07T03:09:31.382672Z[0m [34mDEBUG[0m [2mh2::client[0m[2m:[0m client connection bound
+[2m2026-05-07T03:09:31.382964Z[0m [34mDEBUG[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mSettings { flags: (0x0), enable_push: 0, initial_window_size: 2097152, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.383585Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mWindowUpdate { stream_id: StreamId(0), size_increment: 5177345 }
+[2m2026-05-07T03:09:31.383619Z[0m [34mDEBUG[0m [2mtower::buffer::worker[0m[2m:[0m [3mservice.ready[0m[2m=[0mtrue processing request
+[2m2026-05-07T03:09:31.391628Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.392222Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(1) }
+[2m2026-05-07T03:09:31.394444Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(1), flags: (0x1: END_STREAM) }
+[2m2026-05-07T03:09:31.396315Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mSettings { flags: (0x0), initial_window_size: 1048576, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.399701Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mSettings { flags: (0x1: ACK) }
+[2m2026-05-07T03:09:31.402529Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mSettings { flags: (0x1: ACK) }
+[2m2026-05-07T03:09:31.402732Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::proto::settings[0m[2m:[0m received settings ACK; applying Settings { flags: (0x0), enable_push: 0, initial_window_size: 2097152, max_frame_size: 16384, max_header_list_size: 16384 }
+[2m2026-05-07T03:09:31.409341Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mWindowUpdate { stream_id: StreamId(0), size_increment: 983041 }
+[2m2026-05-07T03:09:31.415774Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.415922Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(1) }
+[2m2026-05-07T03:09:31.416220Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(1), flags: (0x5: END_HEADERS | END_STREAM) }
+[2m2026-05-07T03:09:31.417961Z[0m [34mDEBUG[0m [2mtower::buffer::worker[0m[2m:[0m [3mservice.ready[0m[2m=[0mtrue processing request
+[2m2026-05-07T03:09:31.418853Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(3), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.424938Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:31.426378Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_write[0m[2m:[0m send [3mframe[0m[2m=[0mData { stream_id: StreamId(3), flags: (0x1: END_STREAM) }
+[2m2026-05-07T03:09:31.430593Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mHeaders { stream_id: StreamId(3), flags: (0x4: END_HEADERS) }
+[2m2026-05-07T03:09:31.430753Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.678554Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.733062Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.786280Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.894402Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+[2m2026-05-07T03:09:35.899161Z[0m [34mDEBUG[0m [1mConnection[0m[1m{[0m[3mpeer[0m[2m=[0mClient[1m}[0m[2m:[0m [2mh2::codec::framed_read[0m[2m:[0m received [3mframe[0m[2m=[0mData { stream_id: StreamId(3) }
+
+
+
+上面为 zeroclaw-core  、zeroclaw-edge 相关日志。
+下面为 ZeroClaw WebSocket 诊断工具日志，发送第二条 "hola 2"后收不到回应。
+
+
+
+
+ZeroClaw WebSocket 诊断工具
+[11:09:24] Session ID: test_1778123364049
+[11:09:24] ✓ WebSocket 已连接
+[11:09:24] ← 收到: {"message_count":0,"resumed":false,"session_id":"test_1778123364049","type":"session_start"}
+[11:09:31] → 发送: hola
+[11:09:35] ← 收到: {"content":"¡","type":"chunk"}
+[11:09:35] ← 收到: {"content":"Hola! ¿En qué puedo ","type":"chunk"}
+[11:09:35] ← 收到: {"content":"ayu","type":"chunk"}
+[11:09:35] ← 收到: {"content":"darte hoy?","type":"chunk"}
+[11:09:41] → 发送: hola 2
+[11:10:08] → 发送: hola 3
+
+
+。请一步一步思考后解决上面的问题。
+
+注意： 是多个websocket连接过来，、zeroclaw-edge上有多个websocket连接 ，接收到多个请求，但  zeroclaw-edge 向 zeroclaw-core 转发时，grpc只有一个连接。即websocket连接数量与 grpc连接数量并不是一对一的，而是N对一，请注意这个关键点。
+
+
+
+能正常收发第一条消息了，相关环境肯定是对的。目前是第二条消息不能收到回应。
+你主要搜查代码问题，环境问题不需要再检查了。
+请一步一步思考后解决上面的问题。
+
+
+
+
+
+
+总结 zeroclaw-edge 向 zeroclaw-core 转发时双方使用的grpc协议，此协议总结后将让别的同学 用Java语言开发一个 grpc client连接至  zeroclaw-core ，实现一些特定的业务需求。
+总结后请生成 相关的grpc api 文档，格式为md.
+md 里能用中文来注释下的地方请使用中文。 
+请一步一步思考后实现上面的目标。
+
+
+
+
+grpc-api-zh.md 中的 下面信息中的 caller_key 需要详细解释下，它是从哪儿可以传入的？怎么使用？等等。
+- 服务端使用 `(caller_key, request_id)` 作为幂等键
+
+把相关结论写入md.
+请一步一步思考后实现上面的目标。
+
+
+crates 需要分为 edge 及 core， 以区分开 zeroclaw-edge.exe 向 zeroclaw-core.exe 所使用的相关代码。
+请一步一步思考后实现上面的目标。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+两者启动及发送消息后的相关日志如上所示。
+
+
+
+
+
