@@ -90,20 +90,25 @@ ZeroClaw is a layered Rust workspace with trait-based extension points.
 zeroclaw/
 ├── src/                          # Main binary (CLI entrypoint)
 ├── crates/
-│   ├── zeroclaw-api/            # Public traits (Provider, Channel, Tool, Memory)
-│   ├── zeroclaw-runtime/        # Agent loop, security, SOP, cron, onboarding
-│   ├── zeroclaw-config/         # TOML schema, secrets, autonomy levels
-│   ├── zeroclaw-providers/      # LLM clients (Anthropic, OpenAI, Ollama, ...)
-│   ├── zeroclaw-channels/       # 30+ messaging integrations
-│   ├── zeroclaw-tools/          # Tool implementations (shell, browser, HTTP, ...)
-│   ├── zeroclaw-memory/         # Conversation memory, embeddings, SQLite
-│   ├── zeroclaw-gateway/        # REST/WebSocket gateway + web dashboard
-│   ├── zeroclaw-hardware/       # GPIO, I2C, SPI, USB hardware abstraction
-│   ├── zeroclaw-tui/            # Terminal UI
-│   ├── zeroclaw-plugins/        # WASM plugin system
-│   ├── zeroclaw-tool-call-parser/ # Tool call parsing/normalization
-│   ├── zeroclaw-infra/          # Tracing, metrics, logging
-│   └── zeroclaw-macros/         # Derive macros
+│   ├── edge/                    # Edge components (zeroclaw-edge.exe)
+│   │   ├── zeroclaw-gateway/   # REST/WebSocket gateway + web dashboard
+│   │   ├── zeroclaw-channels/  # 30+ messaging integrations
+│   │   └── zeroclaw-tui/       # Terminal UI
+│   ├── core/                    # Core components (zeroclaw-core.exe)
+│   │   ├── zeroclaw-runtime/   # Agent loop, security, SOP, cron, onboarding
+│   │   ├── zeroclaw-providers/ # LLM clients (Anthropic, OpenAI, Ollama, ...)
+│   │   ├── zeroclaw-tools/     # Tool implementations (shell, browser, HTTP, ...)
+│   │   ├── zeroclaw-memory/    # Conversation memory, embeddings, SQLite
+│   │   ├── zeroclaw-plugins/   # WASM plugin system
+│   │   ├── zeroclaw-hardware/  # GPIO, I2C, SPI, USB hardware abstraction
+│   │   ├── robot-kit/          # Robot hardware abstraction
+│   │   └── aardvark-sys/       # Aardvark I2C/SPI adapter bindings
+│   └── shared/                  # Shared components (both edge and core)
+│       ├── zeroclaw-api/       # Public traits (Provider, Channel, Tool, Memory)
+│       ├── zeroclaw-config/    # TOML schema, secrets, autonomy levels
+│       ├── zeroclaw-infra/     # Tracing, metrics, logging
+│       ├── zeroclaw-macros/    # Derive macros
+│       └── zeroclaw-tool-call-parser/ # Tool call parsing/normalization
 ├── docs/book/src/               # Documentation (mdBook)
 ├── tests/
 │   ├── component/               # Component tests (one subsystem)
@@ -117,7 +122,7 @@ zeroclaw/
 
 ### Core Traits (Extension Points)
 
-All extension points are defined in `crates/zeroclaw-api/src/`:
+All extension points are defined in `crates/shared/zeroclaw-api/src/`:
 
 - **`Provider`** — LLM client interface with streaming capability flags
 - **`Channel`** — inbound/outbound messaging surface
