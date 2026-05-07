@@ -111,10 +111,10 @@ The reviewer-side queue management — backlog pruning order, stale handling, la
 
 These paths require stricter review and stronger test evidence:
 
-- `crates/zeroclaw-runtime/src/security/`
-- The rest of `crates/zeroclaw-runtime/`
-- `crates/zeroclaw-gateway/` (ingress, authentication, pairing)
-- `crates/zeroclaw-tools/` (anything with execution capability)
+- `crates/core/zeroclaw-runtime/src/security/`
+- The rest of `crates/core/zeroclaw-runtime/`
+- `crates/edge/zeroclaw-gateway/` (ingress, authentication, pairing)
+- `crates/core/zeroclaw-tools/` (anything with execution capability)
 - Filesystem access boundaries.
 - Network and authentication behavior.
 - `.github/workflows/` and the release pipeline.

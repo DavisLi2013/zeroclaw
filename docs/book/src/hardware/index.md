@@ -90,7 +90,7 @@ Per-board pin maps and electrical characteristics:
 
 ## Adding new hardware
 
-See [Adding boards & tools](./adding-boards-and-tools.md) for the step-by-step. TL;DR: implement the `Peripheral` trait from `crates/zeroclaw-hardware/src/`, add a board-specific feature flag, write a probe routine that identifies the board from USB descriptors or serial handshake.
+See [Adding boards & tools](./adding-boards-and-tools.md) for the step-by-step. TL;DR: implement the `Peripheral` trait from `crates/core/zeroclaw-hardware/src/`, add a board-specific feature flag, write a probe routine that identifies the board from USB descriptors or serial handshake.
 
 ## See also
 

@@ -54,7 +54,7 @@ The target users are:
 
 ### 1. Current entry surfaces
 
-ZeroClaw already has a gateway crate: `crates/zeroclaw-gateway`.
+ZeroClaw already has a gateway crate: `crates/edge/zeroclaw-gateway`.
 
 The current gateway is Axum-based and already exposes several relevant surfaces:
 

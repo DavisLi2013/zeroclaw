@@ -130,6 +130,6 @@ Lock this down to only the devices your agent actually needs.
 
 ## Code reference
 
-- Detection: `crates/zeroclaw-runtime/src/security/detect.rs`
-- Backends: `crates/zeroclaw-runtime/src/security/sandbox/` (one file per backend)
-- Config: `[security.sandbox]` block in `crates/zeroclaw-config/src/schema.rs`
+- Detection: `crates/core/zeroclaw-runtime/src/security/detect.rs`
+- Backends: `crates/core/zeroclaw-runtime/src/security/sandbox/` (one file per backend)
+- Config: `[security.sandbox]` block in `crates/shared/zeroclaw-config/src/schema.rs`

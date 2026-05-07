@@ -57,7 +57,7 @@ Register via the runtime's tool factory. See [Developing → Plugin protocol](..
 
 Tool descriptions are [Mozilla Fluent](https://projectfluent.org/) strings — one per tool, localised per locale. This keeps tool descriptions terse in the model's context window while allowing UI localisation.
 
-Source of truth: `crates/zeroclaw-runtime/locales/en/tools.ftl`. Translations are generated and maintained via `cargo fluent fill --locale <code>` (see [Maintainers → Docs & Translations](../maintainers/docs-and-translations.md)).
+Source of truth: `crates/core/zeroclaw-runtime/locales/en/tools.ftl`. Translations are generated and maintained via `cargo fluent fill --locale <code>` (see [Maintainers → Docs & Translations](../maintainers/docs-and-translations.md)).
 
 ## Risk and approval
 

@@ -77,7 +77,7 @@ grep -E 'sk-|ghp_|xox[baprs]' /path/to/log/file | head
 # should return zero results in a normal run
 ```
 
-If you see an unredacted secret, file an issue — the redaction list is in `crates/zeroclaw-infra/src/redact.rs`.
+If you see an unredacted secret, file an issue — the redaction list is in `crates/shared/zeroclaw-infra/src/redact.rs`.
 
 ## Metrics
 

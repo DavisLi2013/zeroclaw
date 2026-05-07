@@ -83,7 +83,7 @@ zeroclaw agent -m "hello"                    # smoke-test with a one-shot messag
 
 If the endpoint isn't OpenAI-compatible and isn't one of the first-class local adapters, you need code.
 
-The trait lives in `crates/zeroclaw-api/src/provider.rs`:
+The trait lives in `crates/shared/zeroclaw-api/src/provider.rs`:
 
 ```rust
 #[async_trait]
@@ -103,7 +103,7 @@ pub trait Provider: Send + Sync {
 
 Implementation pattern:
 
-1. Add a file to `crates/zeroclaw-providers/src/myprovider.rs`
+1. Add a file to `crates/core/zeroclaw-providers/src/myprovider.rs`
 2. Implement `Provider` — translate `Vec<Message>` to the wire format, stream the response, emit `StreamEvent` values
 3. Register via the factory in `lib.rs`:
    ```rust

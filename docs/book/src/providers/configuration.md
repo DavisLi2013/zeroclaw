@@ -21,7 +21,7 @@ base_url = "https://..."   # for OpenAI-compatible or self-hosted endpoints
 
 | `kind` | Implementation | Notes |
 |---|---|---|
-| `anthropic` | `crates/zeroclaw-providers/src/anthropic.rs` | Accepts OAuth tokens (`sk-ant-oat*`) or API keys |
+| `anthropic` | `crates/core/zeroclaw-providers/src/anthropic.rs` | Accepts OAuth tokens (`sk-ant-oat*`) or API keys |
 | `openai` | `openai.rs` | GPT, o-series |
 | `ollama` | `ollama.rs` | Native `/api/chat`. Supports structured output via `format` |
 | `openai-compatible` | `compatible.rs` | One impl for ~20 providers; set `base_url` and optionally `api_key` |

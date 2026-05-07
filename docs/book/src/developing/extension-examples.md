@@ -5,19 +5,19 @@ To add a new provider, channel, tool, or memory backend, implement the correspon
 
 This page contains minimal, working examples for each core extension point.
 
-> **Source of truth**: the trait definitions live in `crates/zeroclaw-api/src/`.
+> **Source of truth**: the trait definitions live in `crates/shared/zeroclaw-api/src/`.
 > If an example here conflicts with the trait file, the trait file wins.
 
 ---
 
-## Tool (`crates/zeroclaw-api/src/tool.rs`)
+## Tool (`crates/shared/zeroclaw-api/src/tool.rs`)
 
 Tools are the agent's hands — they let it interact with the world.
 
 **Required methods**: `name()`, `description()`, `parameters_schema()`, `execute()`.
 The `spec()` method has a default implementation that composes the others.
 
-Register your tool in `crates/zeroclaw-tools/src/lib.rs` via `default_tools()`.
+Register your tool in `crates/core/zeroclaw-tools/src/lib.rs` via `default_tools()`.
 
 ```rust
 // In your crate: use zeroclaw::tools::traits::{Tool, ToolResult};
@@ -76,7 +76,7 @@ impl Tool for HttpGetTool {
 
 ---
 
-## Channel (`crates/zeroclaw-api/src/channel.rs`)
+## Channel (`crates/shared/zeroclaw-api/src/channel.rs`)
 
 Channels let ZeroClaw communicate through any messaging platform.
 
@@ -85,7 +85,7 @@ Default implementations exist for `health_check()`, `start_typing()`, `stop_typi
 draft methods (`send_draft`, `update_draft`, `finalize_draft`, `cancel_draft`),
 and reaction methods (`add_reaction`, `remove_reaction`).
 
-Register your channel in `crates/zeroclaw-channels/src/lib.rs` and add config to `ChannelsConfig` in `crates/zeroclaw-config/src/schema.rs`.
+Register your channel in `crates/edge/zeroclaw-channels/src/lib.rs` and add config to `ChannelsConfig` in `crates/shared/zeroclaw-config/src/schema.rs`.
 
 ```rust
 // In your crate: use zeroclaw::channels::traits::{Channel, ChannelMessage, SendMessage};
@@ -196,7 +196,7 @@ impl Channel for TelegramChannel {
 
 ---
 
-## Provider (`crates/zeroclaw-api/src/provider.rs`)
+## Provider (`crates/shared/zeroclaw-api/src/provider.rs`)
 
 Providers are LLM backend adapters. Each provider connects ZeroClaw to a different model API.
 
@@ -206,7 +206,7 @@ Everything else has default implementations:
 `capabilities()` returns no native tool calling by default;
 streaming methods return empty/error streams by default.
 
-Register your provider in `crates/zeroclaw-providers/src/lib.rs`.
+Register your provider in `crates/core/zeroclaw-providers/src/lib.rs`.
 
 ```rust
 // In your crate: use zeroclaw::providers::traits::Provider;
@@ -271,14 +271,14 @@ impl Provider for OllamaProvider {
 
 ---
 
-## Memory (`crates/zeroclaw-api/src/memory_traits.rs`)
+## Memory (`crates/shared/zeroclaw-api/src/memory_traits.rs`)
 
 Memory backends provide pluggable persistence for the agent's knowledge.
 
 **Required methods**: `name()`, `store()`, `recall()`, `get()`, `list()`, `forget()`, `count()`, `health_check()`.
 Both `store()` and `recall()` accept an optional `session_id` for scoping.
 
-Register your backend in `crates/zeroclaw-memory/src/lib.rs`.
+Register your backend in `crates/core/zeroclaw-memory/src/lib.rs`.
 
 ```rust
 // In your crate: use zeroclaw::memory::traits::{Memory, MemoryEntry, MemoryCategory};
@@ -399,9 +399,9 @@ impl Memory for InMemoryBackend {
 
 All extension traits follow the same wiring pattern:
 
-1. Create your implementation file in the relevant `crates/zeroclaw-*/src/` directory.
+1. Create your implementation file in the relevant `crates/{edge|core|shared}/zeroclaw-*/src/` directory.
 2. Register it in the module's factory function (e.g., `default_tools()`, provider match arm).
-3. Add any needed config keys to `crates/zeroclaw-config/src/schema.rs`.
+3. Add any needed config keys to `crates/shared/zeroclaw-config/src/schema.rs`.
 4. Write focused tests for factory wiring and error paths.
 
 ---
@@ -412,7 +412,7 @@ A few invariants that hold across every extension. Breaking these tends to be th
 
 - **Extend by trait + factory wiring first.** Adding a new provider/channel/tool/peripheral is implementing a trait and registering it in the relevant factory. Avoid cross-module rewrites for what should be an isolated feature.
 - **Dependency direction goes inward to contracts.** Concrete integrations depend on `zeroclaw-api` traits, `zeroclaw-config` schema, and `zeroclaw-infra` utilities — not on each other. Provider code does not import channel internals; tool code does not mutate gateway policy directly.
-- **Module responsibilities stay single-purpose.** Orchestration in `zeroclaw-runtime/src/agent/`, transport in `zeroclaw-channels/`, model I/O in `zeroclaw-providers/`, policy in `zeroclaw-runtime/src/security/`, execution in `zeroclaw-tools/`.
+- **Module responsibilities stay single-purpose.** Orchestration in `crates/core/zeroclaw-runtime/src/agent/`, transport in `crates/edge/zeroclaw-channels/`, model I/O in `crates/core/zeroclaw-providers/`, policy in `crates/core/zeroclaw-runtime/src/security/`, execution in `crates/core/zeroclaw-tools/`.
 - **Rule of three for shared abstractions.** Introduce new shared types only after a third real caller materialises. Premature abstractions accrete weight that future contributors have to navigate around.
 - **Config keys are public contract.** Schema changes need defaults, compatibility impact, and a migration/rollback path documented in the PR.
 

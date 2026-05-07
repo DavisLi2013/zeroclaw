@@ -89,8 +89,8 @@ Excess requests return 429.
 
 ## Code
 
-- Channel: `crates/zeroclaw-channels/src/webhook.rs` (plus gateway ingress in `crates/zeroclaw-gateway/`)
-- Templates: `crates/zeroclaw-runtime/src/templating.rs`
+- Channel: `crates/edge/zeroclaw-channels/src/webhook.rs` (plus gateway ingress in `crates/edge/zeroclaw-gateway/`)
+- Templates: `crates/core/zeroclaw-runtime/src/templating.rs`
 
 ## See also
 

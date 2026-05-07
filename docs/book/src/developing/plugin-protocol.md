@@ -4,7 +4,7 @@ status: accepted
 last-reviewed: 2026-04-19
 relates-to:
   - ADR-003
-  - crates/zeroclaw-plugins
+  - crates/core/zeroclaw-plugins
 ---
 
 # Plugin Protocol

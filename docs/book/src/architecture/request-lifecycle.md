@@ -75,7 +75,7 @@ Outbound messages go back through the same channel adapter. Adapters with multi-
 
 ## Where it lives in code
 
-- Agent loop: `crates/zeroclaw-runtime/src/agent/loop_.rs`
-- Tool-call validation: `crates/zeroclaw-runtime/src/security/`
-- Channel orchestration: `crates/zeroclaw-channels/src/orchestrator/`
-- Provider streaming: `crates/zeroclaw-providers/src/traits.rs` (`StreamEvent` enum), `compatible.rs` (SSE parser)
+- Agent loop: `crates/core/zeroclaw-runtime/src/agent/loop_.rs`
+- Tool-call validation: `crates/core/zeroclaw-runtime/src/security/`
+- Channel orchestration: `crates/edge/zeroclaw-channels/src/orchestrator/`
+- Provider streaming: `crates/core/zeroclaw-providers/src/traits.rs` (`StreamEvent` enum), `compatible.rs` (SSE parser)

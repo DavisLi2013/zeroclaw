@@ -44,12 +44,12 @@ provider/tool/runtime execution
 
 ## File Structure
 
-- Create `crates/zeroclaw-gateway/src/core_client.rs`: shared request/event/result types and `CoreAgentClient` trait.
-- Create `crates/zeroclaw-gateway/src/core_client_grpc.rs`: edge-side gRPC client for `zeroclaw.v1.AgentService`.
-- Modify `crates/zeroclaw-gateway/src/lib.rs`: add `core_client` to `AppState`, initialize it, and route REST/webhook/channel chat through it.
-- Modify `crates/zeroclaw-gateway/src/ws.rs`: route WebSocket chat through `CoreAgentClient`.
-- Modify `crates/zeroclaw-gateway/src/grpc.rs`: keep this as core-side gRPC service; expose protobuf helpers needed by `core_client_grpc`.
-- Modify `crates/zeroclaw-config/src/schema.rs`: add `[gateway.core]` config.
+- Create `crates/edge/zeroclaw-gateway/src/core_client.rs`: shared request/event/result types and `CoreAgentClient` trait.
+- Create `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs`: edge-side gRPC client for `zeroclaw.v1.AgentService`.
+- Modify `crates/edge/zeroclaw-gateway/src/lib.rs`: add `core_client` to `AppState`, initialize it, and route REST/webhook/channel chat through it.
+- Modify `crates/edge/zeroclaw-gateway/src/ws.rs`: route WebSocket chat through `CoreAgentClient`.
+- Modify `crates/edge/zeroclaw-gateway/src/grpc.rs`: keep this as core-side gRPC service; expose protobuf helpers needed by `core_client_grpc`.
+- Modify `crates/shared/zeroclaw-config/src/schema.rs`: add `[gateway.core]` config.
 - Create `src/bin/zeroclaw-core.rs`: starts only core gRPC.
 - Create `src/bin/zeroclaw-edge.rs`: starts gateway edge and requires a core gRPC endpoint.
 - Modify `src/lib.rs`: expose shared startup helpers for the split binaries.
@@ -58,9 +58,9 @@ provider/tool/runtime execution
 ## Task 1: Add CoreAgentClient Types
 
 **Files:**
-- Create: `crates/zeroclaw-gateway/src/core_client.rs`
-- Modify: `crates/zeroclaw-gateway/src/lib.rs`
-- Test: `crates/zeroclaw-gateway/src/core_client.rs`
+- Create: `crates/edge/zeroclaw-gateway/src/core_client.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/lib.rs`
+- Test: `crates/edge/zeroclaw-gateway/src/core_client.rs`
 
 - [x] **Step 1: Write the failing test**
 
@@ -98,7 +98,7 @@ Expected: fail because `core_client` module and types do not exist.
 
 - [x] **Step 3: Add minimal core client types**
 
-Create `crates/zeroclaw-gateway/src/core_client.rs`:
+Create `crates/edge/zeroclaw-gateway/src/core_client.rs`:
 
 ```rust
 use std::pin::Pin;
@@ -159,7 +159,7 @@ pub trait CoreAgentClient: Send + Sync {
 }
 ```
 
-Modify `crates/zeroclaw-gateway/src/lib.rs`:
+Modify `crates/edge/zeroclaw-gateway/src/lib.rs`:
 
 ```rust
 pub mod core_client;
@@ -178,9 +178,9 @@ Expected: pass.
 ## Task 2: Add GrpcCoreAgentClient Event Mapping
 
 **Files:**
-- Create: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
-- Modify: `crates/zeroclaw-gateway/src/lib.rs`
-- Test: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
+- Create: `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/lib.rs`
+- Test: `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs`
 
 - [x] **Step 1: Write the failing mapping test**
 
@@ -229,7 +229,7 @@ Expected: fail because `core_client_grpc` does not exist.
 
 - [x] **Step 3: Implement mapping**
 
-Create `crates/zeroclaw-gateway/src/core_client_grpc.rs` with:
+Create `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs` with:
 
 ```rust
 use crate::core_client::CoreRunEvent;
@@ -303,7 +303,7 @@ Expected: pass.
 ## Task 3: Add Gateway Core Configuration
 
 **Files:**
-- Modify: `crates/zeroclaw-config/src/schema.rs`
+- Modify: `crates/shared/zeroclaw-config/src/schema.rs`
 - Test: config schema tests in `schema.rs`
 
 - [x] **Step 1: Write failing config default test**
@@ -372,7 +372,7 @@ Expected: pass.
 ## Task 4: Put CoreAgentClient in AppState
 
 **Files:**
-- Modify: `crates/zeroclaw-gateway/src/lib.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/lib.rs`
 - Test: existing `AppState` clone/test-state tests
 
 - [x] **Step 1: Write failing AppState client test**
@@ -484,7 +484,7 @@ Expected: pass.
 ## Task 5: Migrate REST/Webhook/Channel Chat to CoreAgentClient
 
 **Files:**
-- Modify: `crates/zeroclaw-gateway/src/lib.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/lib.rs`
 - Test: gateway webhook tests
 
 - [x] **Step 1: Write failing behavior test**
@@ -540,7 +540,7 @@ Expected: pass.
 ## Task 6: Migrate WebSocket Chat to CoreAgentClient
 
 **Files:**
-- Modify: `crates/zeroclaw-gateway/src/ws.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/ws.rs`
 - Test: WebSocket unit tests or focused mapping tests
 
 - [x] **Step 1: Write failing WebSocket event mapping test**
@@ -631,8 +631,8 @@ Expected: pass.
 ## Task 7: Add GrpcCoreAgentClient Client Calls
 
 **Files:**
-- Modify: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
-- Test: `crates/zeroclaw-gateway/src/core_client_grpc.rs`
+- Modify: `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs`
+- Test: `crates/edge/zeroclaw-gateway/src/core_client_grpc.rs`
 
 - [x] **Step 1: Write failing request conversion test**
 
@@ -726,8 +726,8 @@ Expected: pass.
 ## Task 8: Add Edge Boundary Regression Tests
 
 **Files:**
-- Test: `crates/zeroclaw-gateway/src/ws.rs`
-- Test: `crates/zeroclaw-gateway/src/lib.rs`
+- Test: `crates/edge/zeroclaw-gateway/src/ws.rs`
+- Test: `crates/edge/zeroclaw-gateway/src/lib.rs`
 
 - [x] **Step 1: Add scan-based boundary test**
 
@@ -737,8 +737,8 @@ Add a test that reads edge source files and rejects forbidden agent calls:
 #[test]
 fn edge_sources_do_not_call_agent_runtime_directly() {
     let files = [
-        "crates/zeroclaw-gateway/src/ws.rs",
-        "crates/zeroclaw-gateway/src/lib.rs",
+        "crates/edge/zeroclaw-gateway/src/ws.rs",
+        "crates/edge/zeroclaw-gateway/src/lib.rs",
     ];
     let forbidden = [
         "Agent::from_config",

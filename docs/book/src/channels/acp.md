@@ -231,11 +231,11 @@ The selected `project_root` or `cwd` from `session/new` becomes the `SecurityPol
 
 ## Code reference
 
-- ACP server: `crates/zeroclaw-channels/src/orchestrator/acp_server.rs`
-- ACP back-channel: `crates/zeroclaw-channels/src/acp_channel.rs`
-- Project-root binding: `crates/zeroclaw-config/src/project_root.rs`
-- Per-session path enforcement: `crates/zeroclaw-config/src/policy.rs` (`SecurityPolicy::from_config`), `crates/zeroclaw-runtime/src/agent/agent.rs` (`from_config_with_session_cwd_and_mcp`)
-- OS-level sandbox detection/backends: `crates/zeroclaw-runtime/src/security/detect.rs`, `landlock.rs`, `bubblewrap.rs`, `seatbelt.rs`
+- ACP server: `crates/edge/zeroclaw-channels/src/orchestrator/acp_server.rs`
+- ACP back-channel: `crates/edge/zeroclaw-channels/src/acp_channel.rs`
+- Project-root binding: `crates/shared/zeroclaw-config/src/project_root.rs`
+- Per-session path enforcement: `crates/shared/zeroclaw-config/src/policy.rs` (`SecurityPolicy::from_config`), `crates/core/zeroclaw-runtime/src/agent/agent.rs` (`from_config_with_session_cwd_and_mcp`)
+- OS-level sandbox detection/backends: `crates/core/zeroclaw-runtime/src/security/detect.rs`, `landlock.rs`, `bubblewrap.rs`, `seatbelt.rs`
 
 ## See also
 

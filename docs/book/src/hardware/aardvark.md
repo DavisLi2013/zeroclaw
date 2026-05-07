@@ -32,7 +32,7 @@ A plain-language walkthrough of every piece and how they connect.
 
 ### Layer 1 — `aardvark-sys` (the USB talker)
 
-**File:** `crates/aardvark-sys/src/lib.rs`
+**File:** `crates/core/aardvark-sys/src/lib.rs`
 
 This is the only layer that ever touches the raw C library.
 Think of it as a thin translator: it turns C function calls into safe Rust.
@@ -83,7 +83,7 @@ Drop(handle)
 
 ### Layer 2 — `AardvarkTransport` (the bridge)
 
-**File:** `crates/zeroclaw-hardware/src/aardvark.rs`
+**File:** `crates/core/zeroclaw-hardware/src/aardvark.rs`
 
 The rest of ZeroClaw speaks a single language: `ZcCommand` → `ZcResponse`.
 `AardvarkTransport` translates between that protocol and the aardvark-sys calls above.
@@ -133,7 +133,7 @@ send(ZcCommand) → ZcResponse
 
 ### Layer 3 — Tools (what the agent calls)
 
-**File:** `crates/zeroclaw-hardware/src/aardvark_tools.rs`
+**File:** `crates/core/zeroclaw-hardware/src/aardvark_tools.rs`
 
 Each tool is a thin wrapper. It:
 1. Validates the agent's JSON input
@@ -183,7 +183,7 @@ DatasheetTool.call(args)
 
 ### Layer 4 — Device Registry (the address book)
 
-**File:** `crates/zeroclaw-hardware/src/device.rs`
+**File:** `crates/core/zeroclaw-hardware/src/device.rs`
 
 The registry is a runtime map of every connected device.
 Each entry stores: alias, kind, capabilities, transport handle.
@@ -211,7 +211,7 @@ resolve_aardvark_device(args)
 
 ### Layer 5 — `boot()` (startup wiring)
 
-**File:** `crates/zeroclaw-hardware/src/lib.rs`
+**File:** `crates/core/zeroclaw-hardware/src/lib.rs`
 
 `boot()` runs once at startup. For Aardvark:
 
@@ -236,7 +236,7 @@ boot()
 
 ### Layer 6 — Tool Registry (the loader)
 
-**File:** `crates/zeroclaw-hardware/src/tool_registry.rs`
+**File:** `crates/core/zeroclaw-hardware/src/tool_registry.rs`
 
 After `boot()`, the tool registry checks what hardware is present and loads
 only the relevant tools:
@@ -321,5 +321,5 @@ This is why the `hardware_feature_registers_all_six_tools` test still passes in 
 | SDK needed | no | yes (`vendor/aardvark.h` + `.so`) |
 
 The only code that changes when you plug in real hardware is inside
-`crates/aardvark-sys/src/lib.rs` — every other layer is already wired up
+`crates/core/aardvark-sys/src/lib.rs` — every other layer is already wired up
 and waiting.

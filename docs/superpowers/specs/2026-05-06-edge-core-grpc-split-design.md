@@ -25,12 +25,12 @@ connects to core directly.
 The split is feasible because the repository already contains both sides of the
 future boundary:
 
-- `crates/zeroclaw-gateway/src/lib.rs` owns HTTP, REST chat, webhooks, auth,
+- `crates/edge/zeroclaw-gateway/src/lib.rs` owns HTTP, REST chat, webhooks, auth,
   rate limiting, static web assets, SSE, session persistence, and channel
   handlers.
-- `crates/zeroclaw-gateway/src/ws.rs` owns WebSocket chat and currently calls
+- `crates/edge/zeroclaw-gateway/src/ws.rs` owns WebSocket chat and currently calls
   `Agent::turn_streamed` directly.
-- `crates/zeroclaw-gateway/src/grpc.rs` already exposes
+- `crates/edge/zeroclaw-gateway/src/grpc.rs` already exposes
   `zeroclaw.v1.AgentService` with `CreateRun`, `StreamRun`, `CancelRun`, and
   `GetRun`.
 - `src/main.rs` already wires a `grpc` command that starts only the gRPC server.

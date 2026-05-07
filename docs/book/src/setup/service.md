@@ -11,7 +11,7 @@ zeroclaw service status      # running / stopped, last exit code
 zeroclaw service uninstall   # remove it
 ```
 
-The platform-specific backends are implemented in `crates/zeroclaw-runtime/src/service/`. You don't have to think about them — but knowing what they produce helps when debugging.
+The platform-specific backends are implemented in `crates/core/zeroclaw-runtime/src/service/`. You don't have to think about them — but knowing what they produce helps when debugging.
 
 ## Linux — systemd
 

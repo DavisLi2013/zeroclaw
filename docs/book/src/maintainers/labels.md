@@ -140,7 +140,7 @@ Heuristic combining touched paths and change size. Currently applied **manually*
 | `risk: high` | Touches a high-risk path, or large security-adjacent change |
 | `risk: manual` | Maintainer override that freezes automated risk recalculation |
 
-High-risk paths: `crates/zeroclaw-runtime/src/**`, `crates/zeroclaw-gateway/src/**`, `crates/zeroclaw-tools/src/**`, `crates/zeroclaw-runtime/src/security/**`, `.github/workflows/**`.
+High-risk paths: `crates/core/zeroclaw-runtime/src/**`, `crates/edge/zeroclaw-gateway/src/**`, `crates/core/zeroclaw-tools/src/**`, `crates/core/zeroclaw-runtime/src/security/**`, `.github/workflows/**`.
 
 When uncertain, treat as higher risk.
 

@@ -15,7 +15,7 @@ voice = "Polly.Joanna-Neural"      # Telnyx voice ID
 
 Full-duplex SIP voice powered by Telnyx. The agent talks over a real phone call — inbound or outbound. Supports barge-in, mid-turn tool use, and regional number provisioning.
 
-**Pair with:** a `telnyx` provider for the brain (`crates/zeroclaw-providers/src/telnyx.rs`) and ensure your Telnyx account has a SIP connection with the correct webhook URL pointed at the ZeroClaw gateway.
+**Pair with:** a `telnyx` provider for the brain (`crates/core/zeroclaw-providers/src/telnyx.rs`) and ensure your Telnyx account has a SIP connection with the correct webhook URL pointed at the ZeroClaw gateway.
 
 ## Voice Call (Twilio / Telnyx / Plivo)
 

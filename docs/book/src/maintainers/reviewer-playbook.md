@@ -20,8 +20,8 @@ Use this section to route a review before reading deeper. Each row links to the 
 | Risk label | Typical paths | Minimum depth | Required evidence |
 |---|---|---|---|
 | `risk: low` | Docs, tests, chore, isolated non-runtime | 1 reviewer + CI gate | Coherent local validation, no behavior ambiguity |
-| `risk: medium` | `crates/zeroclaw-providers/`, `crates/zeroclaw-channels/`, `crates/zeroclaw-memory/`, `crates/zeroclaw-config/` | 1 subsystem-aware reviewer + behavior verification | Focused scenario proof, explicit side effects |
-| `risk: high` | `crates/zeroclaw-runtime/src/security/`, the rest of `crates/zeroclaw-runtime/`, `crates/zeroclaw-gateway/`, `crates/zeroclaw-tools/`, `.github/workflows/` | Fast triage + deep review + rollback readiness | Security and failure-mode checks, rollback clarity |
+| `risk: medium` | `crates/core/zeroclaw-providers/`, `crates/edge/zeroclaw-channels/`, `crates/core/zeroclaw-memory/`, `crates/shared/zeroclaw-config/` | 1 subsystem-aware reviewer + behavior verification | Focused scenario proof, explicit side effects |
+| `risk: high` | `crates/core/zeroclaw-runtime/src/security/`, the rest of `crates/core/zeroclaw-runtime/`, `crates/edge/zeroclaw-gateway/`, `crates/core/zeroclaw-tools/`, `.github/workflows/` | Fast triage + deep review + rollback readiness | Security and failure-mode checks, rollback clarity |
 
 When uncertain, treat as higher risk.
 

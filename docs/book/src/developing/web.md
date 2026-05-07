@@ -36,7 +36,7 @@ Generating on demand keeps the runtime `build_spec()` as the single contract sou
 
 ## Editing flow
 
-1. Change a gateway handler or schema in `crates/zeroclaw-gateway/`.
+1. Change a gateway handler or schema in `crates/edge/zeroclaw-gateway/`.
 2. Run `cargo web check` — `gen-api` regenerates `api-generated.ts` from the new spec, then `tsc -b` typechecks the dashboard against it. Any consumer that relies on a now-removed field fails to compile.
 3. Update consumers in `web/src/` to match.
 4. `cargo web build` for the final bundle.
