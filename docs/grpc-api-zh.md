@@ -1,12 +1,12 @@
-# ZeroClaw gRPC API 文档
+# axi-agent gRPC API 文档
 
 ## 概述
 
-本文档描述了 **zeroclaw-edge** 与 **zeroclaw-core** 之间使用的 gRPC 协议。此协议基于 `zeroclaw.v1.AgentService`，用于创建、流式传输和管理 AI Agent 的运行会话（Run）。
+本文档描述了 **axi-agent-edge** 与 **axi-agent-core** 之间使用的 gRPC 协议。此协议基于 `axi-agent.v1.AgentService`，用于创建、流式传输和管理 AI Agent 的运行会话（Run）。
 
 **Protocol Buffers 版本**: `proto3`  
-**协议版本**: `zeroclaw.v1`  
-**Proto 文件**: `crates/zeroclaw-gateway/proto/zeroclaw/v1/agent.proto`  
+**协议版本**: `axi-agent.v1`  
+**Proto 文件**: `crates/axi-agent-gateway/proto/axi-agent/v1/agent.proto`  
 **传输协议**: gRPC (HTTP/2)  
 **认证方式**: Bearer Token (通过 `Authorization` metadata)
 
@@ -35,7 +35,7 @@ service AgentService {
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `protocol` | string | 是 | 协议版本，必须为 `"zeroclaw.v1"` |
+| `protocol` | string | 是 | 协议版本，必须为 `"axi-agent.v1"` |
 | `request_id` | string | 是 | 客户端生成的请求唯一标识符，用于幂等性控制 |
 | `session_id` | string | 是 | 会话 ID，用于会话持久化和上下文管理 |
 | `actor` | Actor | 否 | 发起请求的用户/设备信息 |
@@ -89,7 +89,7 @@ service AgentService {
 ```java
 // 创建 gRPC channel
 ManagedChannel channel = ManagedChannelBuilder
-    .forAddress("zeroclaw-core-host", 50051)
+    .forAddress("axi-agent-core-host", 50051)
     .usePlaintext() // 生产环境请使用 TLS
     .build();
 
@@ -98,7 +98,7 @@ AgentServiceGrpc.AgentServiceBlockingStub stub = AgentServiceGrpc.newBlockingStu
 
 // 构建请求
 CreateRunRequest request = CreateRunRequest.newBuilder()
-    .setProtocol("zeroclaw.v1")
+    .setProtocol("axi-agent.v1")
     .setRequestId(UUID.randomUUID().toString())
     .setSessionId("user-session-123")
     .setActor(Actor.newBuilder()
@@ -462,7 +462,7 @@ public class BearerTokenCallCredentials extends CallCredentials {
 
 ### 配置说明
 
-- 如果 zeroclaw-core 配置了 `gateway.require_pairing = true`，则必须提供有效的 Bearer Token
+- 如果 axi-agent-core 配置了 `gateway.require_pairing = true`，则必须提供有效的 Bearer Token
 - Token 需要在 `gateway.paired_tokens` 列表中预先配置
 - 如果 `require_pairing = false`，则可以匿名访问（不推荐生产环境）
 
@@ -473,12 +473,12 @@ public class BearerTokenCallCredentials extends CallCredentials {
 ### 场景：用户发送消息并接收 Agent 响应
 
 ```java
-public class ZeroClawClient {
+public class axi-agentClient {
     private final ManagedChannel channel;
     private final AgentServiceGrpc.AgentServiceBlockingStub blockingStub;
     private final AgentServiceGrpc.AgentServiceStub asyncStub;
     
-    public ZeroClawClient(String host, int port, String token) {
+    public axi-agentClient(String host, int port, String token) {
         this.channel = ManagedChannelBuilder
             .forAddress(host, port)
             .usePlaintext()
@@ -495,7 +495,7 @@ public class ZeroClawClient {
         // 1. 创建运行会话
         String requestId = UUID.randomUUID().toString();
         CreateRunRequest createRequest = CreateRunRequest.newBuilder()
-            .setProtocol("zeroclaw.v1")
+            .setProtocol("axi-agent.v1")
             .setRequestId(requestId)
             .setSessionId(sessionId)
             .setActor(Actor.newBuilder()
@@ -566,7 +566,7 @@ public class ZeroClawClient {
     }
     
     public static void main(String[] args) throws Exception {
-        ZeroClawClient client = new ZeroClawClient(
+        axi-agentClient client = new axi-agentClient(
             "localhost", 
             50051, 
             "your-bearer-token"
@@ -699,7 +699,7 @@ public class ZeroClawClient {
 ```protobuf
 syntax = "proto3";
 
-package zeroclaw.v1;
+package axi-agent.v1;
 
 import "google/protobuf/timestamp.proto";
 
@@ -877,4 +877,4 @@ protoc --java_out=src/main/java \
 
 ## 联系与支持
 
-如有问题或需要技术支持，请联系 ZeroClaw 开发团队。
+如有问题或需要技术支持，请联系 axi-agent 开发团队。
