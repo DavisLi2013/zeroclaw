@@ -192,22 +192,25 @@ cargo build --no-default-features --features agent-runtime
 - **Edition**: Rust 2024 (MSRV: 1.87)
 - **Formatting**: `cargo fmt --all` (enforced in CI)
 - **Linting**: Clippy with `#![warn(clippy::all, clippy::pedantic)]` at crate root
-- **Error handling**: Propagate errors with `?`; avoid `unwrap()`/`expect()` in production paths
+- **Error handling**: Propagate errors with `?`; avoid `unwrap()`/`expect()` in production paths (document the invariant if panic is truly impossible)
 - **Async runtime**: Tokio with minimal features
 - **Logging**: Use `tracing` spans/events, not `println!`
+- **Dead code**: Do not suppress unused production code with `#[allow(dead_code)]` — delete it, wire it into behavior, or track a follow-up issue
 
-### Localization
+### Localization (Critical)
 
-- **User-facing output** (CLI messages, tool descriptions, onboarding prompts) must use `fl!()` / Fluent strings
-- **Log messages**, `tracing::` spans/events, and panic messages stay in English
-- Never use bare string literals for user-facing text
+- **User-facing output** (CLI messages, tool descriptions, onboarding prompts) **must** use `fl!()` / Fluent strings — never bare string literals
+- **Log messages**, `tracing::` spans/events, and panic messages stay in English with stable `error_key` fields
+- Panics and `tracing::` lines are never translated
+- The Wiki and internal developer docs are English only
 
 ### Security
 
 - Never commit secrets, API keys, tokens, or personal data
-- Use `.env` for local development (git-ignored)
+- Use `.env` for local development (git-ignored, copy from `.env.example`)
 - Pre-commit hook runs `gitleaks` if installed
 - High-risk changes (security policy, access control, gateway, tools) require extra scrutiny
+- Never commit real names, emails, or PII in test data, examples, docs, or commits (see `docs/book/src/contributing/privacy.md`)
 
 ## Workflow Rules
 
@@ -219,6 +222,7 @@ cargo build --no-default-features --features agent-runtime
 6. **Complete PR template** — `.github/pull_request_template.md` is mandatory
 7. **Validation evidence required** — include actual command output, not "CI will check"
 8. **Small PRs preferred** — aim for `size: XS/S/M`
+9. **Privacy discipline is a merge gate** — never commit real names, emails, tokens, or PII
 
 ### Pre-Push Checklist
 
@@ -235,6 +239,55 @@ cargo test --locked
 # Or run full quality gate
 ./scripts/ci/rust_quality_gate.sh
 ```
+
+### Pre-Push Hook (Recommended)
+
+```bash
+# Enable the pre-push hook (runs fmt, clippy, tests before every push)
+git config core.hooksPath .githooks
+
+# Skip hook for rapid iteration (CI still runs checks)
+git push --no-verify
+```
+
+### Pre-Push Hook Opt-ins
+
+Set environment variables to enable additional checks for one push:
+
+| Variable | Effect |
+|----------|--------|
+| `ZEROCLAW_STRICT_LINT=1` | Strict lint pass on the full repo |
+| `ZEROCLAW_STRICT_DELTA_LINT=1` | Strict lint on changed Rust lines only |
+| `ZEROCLAW_DOCS_LINT=1` | Markdown gate on changed lines |
+| `ZEROCLAW_DOCS_LINKS=1` | Link check on added links only |
+
+## Stability Tiers
+
+Every workspace crate carries a stability tier per the Microkernel Architecture RFC:
+
+| Crate | Tier | Notes |
+|-------|------|-------|
+| `zeroclaw-api` | Experimental | Stable at v1.0.0 (formal milestone) |
+| `zeroclaw-config` | Beta | Stable at v0.8.0 |
+| `zeroclaw-providers` | Beta | — |
+| `zeroclaw-memory` | Beta | — |
+| `zeroclaw-infra` | Beta | — |
+| `zeroclaw-tool-call-parser` | Beta | Stable at v0.8.0 |
+| `zeroclaw-channels` | Experimental | Plugin migration at v1.0.0 |
+| `zeroclaw-tools` | Experimental | Plugin migration at v1.0.0 |
+| `zeroclaw-runtime` | Experimental | Agent runtime (agent loop, security, cron, SOP, skills, observability) |
+| `zeroclaw-gateway` | Experimental | Separate binary at v0.9.0 |
+| `zeroclaw-tui` | Experimental | TUI onboarding wizard |
+| `zeroclaw-plugins` | Experimental | WASM plugin system — foundation for v1.0.0 plugin ecosystem |
+| `zeroclaw-hardware` | Experimental | USB discovery, peripherals, serial |
+| `zeroclaw-macros` | Beta | Tightly coupled to config schema |
+
+**Tiers**: 
+- **Stable** = covered by breaking-change policy
+- **Beta** = breaking changes permitted in MINOR with changelog notes
+- **Experimental** = no stability guarantee
+
+Tiers are promoted, never demoted, through deliberate team decision.
 
 ## Risk Tiers
 
@@ -274,19 +327,41 @@ mdbook serve
 
 AI coding assistant skills live in `.claude/skills/`. Key skills:
 
-- **`github-pr-review-session`** — PR review co-pilot (trigger: `review 1234`)
-- **`changelog-generation`** — Generate changelogs (trigger: `generate changelog`)
-- **`github-issue-triage`** — Issue triage and backlog management (trigger: `triage issues`)
-- **`zeroclaw`** — Operational guide for ZeroClaw CLI/API (trigger: `check agent status`)
+- **`github-pr-review-session`** — PR review co-pilot; posts reviews as the active `gh` account holder using RFC feedback taxonomy (🔴/🟡/✅/🔵/🟢). Trigger: `review 1234`, `re-review 1234`, `go through the queue`
+- **`changelog-generation`** — Generate changelogs between stable tags, resolve contributors via GraphQL. Trigger: `generate changelog`, `release notes for v0.7.x`
+- **`github-issue-triage`** — Issue triage and lifecycle management; manages backlog, labels, stale policies. Trigger: `triage issues`, `sweep issues`, `handle issue #N`
+- **`github-issue`** — Interactively file structured GitHub issues using repo templates. Trigger: `file issue`, `report bug`, `feature request`
+- **`github-pr`** — Open or update GitHub PRs, handle validation evidence, manage PR descriptions. Trigger: `open PR`, `update PR`, `submit for review`
+- **`squash-merge`** — Perform conventional squash-merges into master with preserved commit history. Trigger: `squash-merge #123`, `land #789`
+- **`zeroclaw`** — Operational guide for ZeroClaw CLI/API (send messages, manage memory/cron, check status, configure channels). Trigger: `check agent status`, `manage memory`, `zeroclaw config`
+- **`skill-creator`** — Framework for creating, testing, evaluating, and optimizing new AI skills. Trigger: `create skill`, `improve skill`, `run skill evals`
+
+See `AGENTS.md` for full skill descriptions and trigger patterns.
 
 ## Additional Resources
 
+- **AGENTS.md**: `AGENTS.md` — **Read this first**. Cross-tool agent instructions with commands, project snapshot, risk tiers, workflow rules, anti-patterns, and skills
 - **README**: `README.md` — quick start, install, architecture diagram
-- **AGENTS.md**: `AGENTS.md` — cross-tool agent instructions (shared with all AI assistants)
-- **CONTRIBUTING**: `CONTRIBUTING.md` — contribution flow, PR rules, testing
+- **CONTRIBUTING**: `CONTRIBUTING.md` — contribution flow, PR rules, testing, secret management
 - **SECURITY**: `SECURITY.md` — security policy, responsible disclosure
 - **Architecture deep dive**: `docs/book/src/architecture/crates.md`
 - **Request lifecycle**: `docs/book/src/architecture/request-lifecycle.md`
+- **Privacy & PII rules**: `docs/book/src/contributing/privacy.md` — **mandatory reading**
+- **Testing taxonomy**: `docs/book/src/contributing/testing.md`
+- **PR review protocol**: `docs/book/src/contributing/pr-review-protocol.md`
+
+## Dev-Operational Contracts
+
+Protected files consumed by AI coding skills and development tooling. Do not move or delete without updating all consuming skills and AGENTS.md:
+
+| Protected file | Consuming skill / tool |
+|---|---|
+| `docs/book/src/contributing/pr-review-protocol.md` | `github-pr-review-session` — review protocol |
+| `docs/book/src/maintainers/changelog-generation.md` | `changelog-generation` — release procedure |
+| `docs/book/src/maintainers/reviewer-playbook.md` | `github-issue-triage` — triage governance |
+| `docs/book/src/maintainers/pr-workflow.md` | `github-issue-triage` — triage discipline |
+| `docs/book/src/contributing/privacy.md` | `github-issue-triage`, PR template — privacy rules |
+| `docs/book/src/foundations/fnd-00*.md` | `github-pr-review-session` — RFC reference data |
 
 ## Quick Reference
 
