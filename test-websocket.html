@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ZeroClaw WebSocket 测试</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        #log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background: #f5f5f5;
+            margin-bottom: 10px;
+        }
+        .message { margin: 5px 0; }
+        .sent { color: blue; }
+        .received { color: green; }
+        .error { color: red; }
+        .info { color: gray; }
+        input { width: 400px; padding: 5px; }
+        button { padding: 5px 15px; }
+    </style>
+</head>
+<body>
+    <h2>ZeroClaw WebSocket 诊断工具</h2>
+    <div id="log"></div>
+    <input type="text" id="input" placeholder="输入消息..." />
+    <button onclick="sendMessage()">发送</button>
+    <button onclick="clearLog()">清空日志</button>
+
+    <script>
+        const log = document.getElementById('log');
+        const input = document.getElementById('input');
+
+        function addLog(message, className) {
+            const div = document.createElement('div');
+            div.className = 'message ' + className;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            log.innerHTML = '';
+        }
+
+        // 生成 session ID
+        const sessionId = 'test_' + Date.now();
+        addLog(`Session ID: ${sessionId}`, 'info');
+
+        // 连接 WebSocket
+        const ws = new WebSocket(`ws://127.0.0.1:42617/ws/chat?session_id=${sessionId}`, ['zeroclaw.v1']);
+
+        ws.onopen = () => {
+            addLog('✓ WebSocket 已连接', 'info');
+        };
+
+        ws.onclose = (event) => {
+            addLog(`✗ WebSocket 已关闭 (code: ${event.code}, reason: ${event.reason})`, 'error');
+        };
+
+        ws.onerror = (error) => {
+            addLog('✗ WebSocket 错误: ' + error, 'error');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                addLog(`← 收到: ${JSON.stringify(msg)}`, 'received');
+            } catch (e) {
+                addLog(`← 收到 (非JSON): ${event.data}`, 'received');
+            }
+        };
+
+        function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (ws.readyState !== WebSocket.OPEN) {
+                addLog('✗ WebSocket 未连接，无法发送', 'error');
+                return;
+            }
+
+            const msg = { type: 'message', content: text };
+            ws.send(JSON.stringify(msg));
+            addLog(`→ 发送: ${text}`, 'sent');
+            input.value = '';
+        }
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process powershell -ArgumentList \"-ExecutionPolicy\", \"Bypass\", \"-File\", \".\\\\start-zeroclaw-edge.ps1\", \"--project-root\", \"D:\\\\workspace\\\\axi-research\\\\zeroclaw\" -NoNewWindow -PassThru)"
+    ]
+  }
+}
