@@ -277,6 +277,20 @@ async fn handle_socket(
             if parsed["type"].as_str() == Some("message") {
                 let content = parsed["content"].as_str().unwrap_or("").to_string();
                 if !content.is_empty() {
+                    // Acquire session lock to serialize concurrent turns (same as main loop)
+                    let _session_guard = match state.session_queue.acquire(&session_key).await {
+                        Ok(guard) => guard,
+                        Err(e) => {
+                            let err = serde_json::json!({
+                                "type": "error",
+                                "message": e.to_string(),
+                                "code": "SESSION_BUSY"
+                            });
+                            let _ = sender.send(Message::Text(err.to_string().into())).await;
+                            return;
+                        }
+                    };
+
                     // Persist user message
                     if let Some(ref backend) = state.session_backend {
                         let user_msg = zeroclaw_providers::ChatMessage::user(&content);
