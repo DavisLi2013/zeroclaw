@@ -534,6 +534,15 @@ async fn process_chat_message(
             }
 
             let event = event?;
+
+            // Check if this is a terminal event (Completed, Cancelled, Failed)
+            let is_terminal = matches!(
+                event,
+                crate::core_client::CoreRunEvent::Completed { .. }
+                    | crate::core_client::CoreRunEvent::Cancelled { .. }
+                    | crate::core_client::CoreRunEvent::Failed { .. }
+            );
+
             if let crate::core_client::CoreRunEvent::MessageDelta { delta } = &event {
                 accumulated_text.push_str(delta);
                 if last_partial_save.elapsed() >= partial_save_interval {
@@ -552,6 +561,11 @@ async fn process_chat_message(
             collected.apply(&event);
             if let Some(ws_msg) = ws_message_from_core_event(event) {
                 let _ = sender.send(Message::Text(ws_msg.to_string().into())).await;
+            }
+
+            // Break the loop when we receive a terminal event
+            if is_terminal {
+                break;
             }
         }
         anyhow::Ok(collected.final_text.clone())

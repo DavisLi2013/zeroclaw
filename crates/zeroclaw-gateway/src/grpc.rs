@@ -1020,13 +1020,15 @@ impl RunRegistry {
         };
 
         let replay_stream = tokio_stream::iter(replay.into_iter().map(Ok));
+
         let live_stream = BroadcastStream::new(rx).filter_map(|item| match item {
             Ok(event) => Some(Ok(event)),
             Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(_)) => {
                 Some(Err(Status::data_loss("run event stream lagged")))
             }
         });
-        Ok(replay_stream.chain(live_stream))
+
+        Ok(tokio_stream::StreamExt::chain(replay_stream, live_stream))
     }
 }
 
