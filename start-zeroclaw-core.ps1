@@ -2,10 +2,10 @@
 # 设置OpenAI API密钥环境变量并启动core服务
 
 # 设置OpenAI API Key
-# $env:OPENAI_API_KEY = "sk-9mYjfdrGia3EOoMGu2i6iEpNphM0gxcVhjSmcKZtXGgxYkWm"
+$env:OPENAI_API_KEY = "sk-9mYjfdrGia3EOoMGu2i6iEpNphM0gxcVhjSmcKZtXGgxYkWm"
 
-# 公司claude 中转key
-$env:OPENAI_API_KEY = "sk-uztpxlIQmdAZxPRfBivPKvniLUAKe68VivsD5sIIqRVcLG4i"
+# 设置Anthropic API Key（用于anthropic provider）
+$env:ANTHROPIC_API_KEY = "sk-uztpxlIQmdAZxPRfBivPKvniLUAKe68VivsD5sIIqRVcLG4i"
 
 if (-not $env:ZEROCLAW_CORE_TOKEN) {
     $env:ZEROCLAW_CORE_TOKEN = "zc_local_core_dev_token"
